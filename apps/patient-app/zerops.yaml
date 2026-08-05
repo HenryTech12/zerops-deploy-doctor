@@ -14,7 +14,7 @@ zerops:
       envSecrets:
         GREETING_NAME: DeployDoctor
       env:
-        DATABASE_URL: postgresql://${db_user}:${db_password}@${db_hostname}:5432/${db_dbName}
+        DATABASE_URL: postgresql://${db_user}:${db_password}@db-primary-internal:5432/${db_dbName}
 
   - setup: db
     run:

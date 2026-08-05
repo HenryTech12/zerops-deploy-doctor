@@ -1,5 +1,11 @@
 # The patient app
 
+> **This branch is BROKEN on purpose** (variant 3 — see table below):
+> `DATABASE_URL` is hardcoded to `db-primary-internal` instead of the
+> `${db_hostname}` reference Zerops resolves automatically, so `/db-ping`
+> fails to resolve the private hostname. Deploy this branch to re-break the
+> patient for a Network & VPN-category diagnosis.
+
 A deliberately tiny Node/Express "hello API" with a Postgres ping endpoint —
 the app DeployDoctor diagnoses and fixes live. No mocking anywhere: this is a
 real deployable service, meant to run on Zerops as its own project (separate
