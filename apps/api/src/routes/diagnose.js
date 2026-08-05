@@ -1,0 +1,30 @@
+// POST /api/diagnose — {yaml?, log?, text?, repo_url?, replay_id?} -> diagnosis JSON + replay_id
+// F1 (diagnosis) + F3 (NL routing, folded into the pipeline) + F7 (repo fetch, folded in).
+const express = require("express");
+const { runDiagnosis } = require("../lib/diagnosisPipeline");
+
+const router = express.Router();
+
+router.post("/", async (req, res) => {
+  const { yaml, log, text, repo_url, replay_id } = req.body || {};
+
+  if (!yaml && !log && !text) {
+    return res.status(400).json({ error: "Provide at least one of yaml, log, or text." });
+  }
+
+  try {
+    const result = await runDiagnosis({
+      yaml,
+      log,
+      text,
+      repoUrl: repo_url,
+      existingReplayId: replay_id,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error("diagnose error:", err);
+    res.status(500).json({ error: "Diagnosis failed", detail: err.message });
+  }
+});
+
+module.exports = router;

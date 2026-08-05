@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #14181c;
+  color: #e8ecef;
+}
+
+::selection {
+  background-color: #4fd1a5;
+  color: #14181c;
+}
+
+.diff-line-add {
+  background-color: rgba(79, 209, 165, 0.12);
+  color: #4fd1a5;
+}
+
+.diff-line-remove {
+  background-color: rgba(240, 102, 90, 0.12);
+  color: #f0665a;
+}
+
+.diff-line-context {
+  color: #8a96a3;
+}

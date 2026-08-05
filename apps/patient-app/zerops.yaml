@@ -1,0 +1,21 @@
+zerops:
+  - setup: app
+    build:
+      base: nodejs@22
+      buildCommands:
+        - npm install
+      deployFiles: ./
+    run:
+      base: nodejs@22
+      ports:
+        - port: 3000
+          httpSupport: true
+      start: npm run start
+      envSecrets:
+        GREETING_NAME: DeployDoctor
+      env:
+        DATABASE_URL: postgresql://${db_user}:${db_password}@${db_hostname}:5432/${db_dbName}
+
+  - setup: db
+    run:
+      base: postgresql@16

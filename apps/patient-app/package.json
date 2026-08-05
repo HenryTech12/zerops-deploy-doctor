@@ -1,0 +1,16 @@
+{
+  "name": "@deploydoctor/patient-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The 'patient' — a deliberately tiny app DeployDoctor diagnoses and fixes live. Deployed as a separate Zerops project.",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "pg": "^8.13.1"
+  }
+}

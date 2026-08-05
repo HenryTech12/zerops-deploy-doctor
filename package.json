@@ -1,0 +1,19 @@
+{
+  "name": "deploydoctor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "DeployDoctor — an AI deployment doctor for Zerops. Diagnoses, fixes, and replays failed deploys.",
+  "workspaces": [
+    "apps/api",
+    "apps/frontend",
+    "apps/patient-app"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:frontend": "npm run dev --workspace apps/frontend",
+    "dev:patient": "npm run dev --workspace apps/patient-app",
+    "db:migrate": "node db/migrate.js",
+    "db:seed": "node db/seed.js"
+  },
+  "license": "MIT"
+}
