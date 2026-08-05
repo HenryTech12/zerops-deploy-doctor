@@ -1,5 +1,12 @@
 # The patient app
 
+> **This branch is BROKEN on purpose** (variant 4 — see table below):
+> `GREETING_NAME` is no longer set, and `src/index.js`'s `/greet` handler
+> calls `.trim()` on it without a defensive check, so the deploy comes up
+> healthy but the endpoint throws on every request. Deploy this branch to
+> re-break the patient for a Code (runtime)-category diagnosis — this is
+> the one DeployDoctor can only advise on, not auto-fix (see F7).
+
 A deliberately tiny Node/Express "hello API" with a Postgres ping endpoint —
 the app DeployDoctor diagnoses and fixes live. No mocking anywhere: this is a
 real deployable service, meant to run on Zerops as its own project (separate
