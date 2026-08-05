@@ -13,6 +13,11 @@ const app = express();
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "*" }));
 app.use(express.json({ limit: "2mb" }));
 
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path} origin=${req.headers.origin || "-"}`);
+  next();
+});
+
 app.get("/health", (req, res) => res.json({ ok: true, service: "deploydoctor-api" }));
 
 app.use("/api/diagnose", diagnoseRoute);
