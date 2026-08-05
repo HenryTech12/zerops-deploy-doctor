@@ -1,5 +1,10 @@
 # The patient app
 
+> **This branch is BROKEN on purpose** (variant 1 — see table below): `httpSupport: true`
+> has been removed from `zerops.yaml`, so the deploy comes up but the port
+> never receives public traffic (502 from the platform edge). Deploy this
+> branch to re-break the patient for a Configuration-category diagnosis.
+
 A deliberately tiny Node/Express "hello API" with a Postgres ping endpoint —
 the app DeployDoctor diagnoses and fixes live. No mocking anywhere: this is a
 real deployable service, meant to run on Zerops as its own project (separate

@@ -9,7 +9,6 @@ zerops:
       base: nodejs@22
       ports:
         - port: 3000
-          httpSupport: true
       start: npm run start
       envSecrets:
         GREETING_NAME: DeployDoctor
