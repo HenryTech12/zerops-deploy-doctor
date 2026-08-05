@@ -1,7 +1,8 @@
-// Defaults to the live deployed API so the frontend works out of the box
-// regardless of whether NEXT_PUBLIC_API_URL made it into a given build.
-// Local dev can still override it via apps/frontend/.env.local.
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://test-iea9.onrender.com";
+// Hardcoded, not read from NEXT_PUBLIC_API_URL: a stale/incorrect value for
+// that env var on the hosting platform's dashboard (wrong path, build-cache
+// reuse of an old baked value) repeatedly caused silent 404s that were hard
+// to diagnose from the client alone. Change this constant directly instead.
+const API_URL = "https://test-iea9.onrender.com";
 
 async function request(path, options) {
   const res = await fetch(`${API_URL}${path}`, {
