@@ -1,4 +1,7 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+// Defaults to the live deployed API so the frontend works out of the box
+// regardless of whether NEXT_PUBLIC_API_URL made it into a given build.
+// Local dev can still override it via apps/frontend/.env.local.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://test-iea9.onrender.com";
 
 async function request(path, options) {
   const res = await fetch(`${API_URL}${path}`, {
