@@ -1,5 +1,10 @@
 # The patient app
 
+> **This branch is BROKEN on purpose** (variant 2 — see table below): `base`
+> is pinned to `nodejs@99`, a version Zerops doesn't publish, so the build
+> fails before the app ever starts. Deploy this branch to re-break the
+> patient for a Build & Deploy-category diagnosis.
+
 A deliberately tiny Node/Express "hello API" with a Postgres ping endpoint —
 the app DeployDoctor diagnoses and fixes live. No mocking anywhere: this is a
 real deployable service, meant to run on Zerops as its own project (separate
