@@ -1,4 +1,4 @@
-// Shared core of F1 (rules engine -> Claude Call A) used by both the manual
+// Shared core of F1 (rules engine -> the LLM (Call A)) used by both the manual
 // POST /api/diagnose route and the automatic F8 watch-mode trigger, so the
 // two entry points can never drift into different diagnosis logic.
 const rulesEngine = require("./rulesEngine");
@@ -44,7 +44,7 @@ function fallbackDiagnosis(pattern, hint, reason) {
 }
 
 /**
- * Runs rules engine + Claude Call A, records seen/failed-fix stats, appends a
+ * Runs rules engine + the LLM (Call A), records seen/failed-fix stats, appends a
  * "fail" timeline event, and returns the diagnosis JSON + replay/attempt ids.
  * Used for both explicit user submissions and F8's automatic trigger.
  */
@@ -87,7 +87,7 @@ async function runDiagnosis({ yaml, log, text, repoUrl, existingReplayId, titleH
       diagnosis = fallbackDiagnosis(pattern, hint, err.message);
     }
   } else {
-    diagnosis = fallbackDiagnosis(pattern, hint, "ANTHROPIC_API_KEY not configured");
+    diagnosis = fallbackDiagnosis(pattern, hint, "GROQ_API_KEY not configured");
   }
 
   let patternId = pattern?.id || null;

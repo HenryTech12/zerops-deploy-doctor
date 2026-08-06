@@ -16,7 +16,7 @@ zerops:
           httpSupport: true
       start: node apps/api/src/index.js
       envSecrets:
-        ANTHROPIC_API_KEY: <set in Zerops UI>
+        GROQ_API_KEY: <set in Zerops UI>
         ZEROPS_API_TOKEN: <set in Zerops UI>
         ZEROPS_PROJECT_ID: <set in Zerops UI>
         GITHUB_TOKEN: <optional, set in Zerops UI for higher API rate limits>

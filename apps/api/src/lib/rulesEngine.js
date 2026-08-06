@@ -1,4 +1,4 @@
-// Fast, deterministic pattern matcher. Runs before the LLM call so Claude gets
+// Fast, deterministic pattern matcher. Runs before the LLM call so the LLM gets
 // grounded context instead of guessing from scratch (see doc §8, Call A).
 const { query } = require("../db");
 

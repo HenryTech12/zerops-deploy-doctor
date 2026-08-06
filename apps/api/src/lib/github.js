@@ -1,4 +1,4 @@
-// F7 — fetch relevant source files from a public GitHub repo so Claude can
+// F7 — fetch relevant source files from a public GitHub repo so the LLM can
 // locate the offending code. Read-only: DeployDoctor never writes to the repo.
 const RAW_BASE = "https://raw.githubusercontent.com";
 const API_BASE = "https://api.github.com";

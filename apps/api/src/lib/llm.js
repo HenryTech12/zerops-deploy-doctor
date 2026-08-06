@@ -1,14 +1,18 @@
-// Claude orchestration — Call A (diagnose+fix, F1/F2/F4/F7) and Call B (NL router, F3).
-// Both calls: strip ```json fences defensively, parse, retry once on bad JSON,
-// then fall back to a rules-engine-only answer. See doc §8.
-const Anthropic = require("@anthropic-ai/sdk");
+// Groq orchestration — Call A (diagnose+fix, F1/F2/F4/F7) and Call B (NL router, F3).
+// gpt-oss-120b handles the hard call (diagnosis + fix generation); gpt-oss-20b
+// handles the cheap one (NL routing is just classification) to conserve rate
+// limit headroom on Groq's free tier. Both calls: strip ```json fences
+// defensively, parse, retry once on bad JSON, then fall back to a
+// rules-engine-only answer. See doc §8.
+const Groq = require("groq-sdk");
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
+const DIAGNOSE_MODEL = process.env.GROQ_DIAGNOSE_MODEL || "openai/gpt-oss-120b";
+const ROUTER_MODEL = process.env.GROQ_ROUTER_MODEL || "openai/gpt-oss-20b";
 
 let _client = null;
 function client() {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  if (!process.env.GROQ_API_KEY) return null;
+  if (!_client) _client = new Groq({ apiKey: process.env.GROQ_API_KEY });
   return _client;
 }
 
@@ -20,20 +24,23 @@ function stripFences(text) {
     .trim();
 }
 
-async function callClaudeJSON({ system, user, maxTokens = 1500 }) {
-  const anthropic = client();
-  if (!anthropic) {
-    throw new Error("ANTHROPIC_API_KEY not configured");
+async function callGroqJSON({ model, system, user, maxTokens = 1500 }) {
+  const groq = client();
+  if (!groq) {
+    throw new Error("GROQ_API_KEY not configured");
   }
 
   const ask = async (userText) => {
-    const resp = await anthropic.messages.create({
-      model: MODEL,
+    const resp = await groq.chat.completions.create({
+      model,
       max_tokens: maxTokens,
-      system,
-      messages: [{ role: "user", content: userText }],
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userText },
+      ],
     });
-    return resp.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+    return resp.choices[0]?.message?.content || "";
   };
 
   let raw = await ask(user);
@@ -93,14 +100,14 @@ Known fixes that did NOT work for this pattern (may be empty): ${
     (failedFixes || []).join("; ") || "(none)"
   }`;
 
-  return callClaudeJSON({ system: DIAGNOSE_SYSTEM_PROMPT, user });
+  return callGroqJSON({ model: DIAGNOSE_MODEL, system: DIAGNOSE_SYSTEM_PROMPT, user });
 }
 
 const ROUTER_SYSTEM_PROMPT = `You are a triage assistant for Zerops deployments. Given a user's free-text description of a problem, classify what should be checked. Respond with JSON only: {"check_type": "config" | "logs" | "status", "reasoning": "..."}`;
 
 /** Call B — NL router (F3). */
 async function routeFreeText(text) {
-  return callClaudeJSON({ system: ROUTER_SYSTEM_PROMPT, user: text, maxTokens: 300 });
+  return callGroqJSON({ model: ROUTER_MODEL, system: ROUTER_SYSTEM_PROMPT, user: text, maxTokens: 300 });
 }
 
-module.exports = { diagnose, routeFreeText, isConfigured: () => Boolean(process.env.ANTHROPIC_API_KEY) };
+module.exports = { diagnose, routeFreeText, isConfigured: () => Boolean(process.env.GROQ_API_KEY) };

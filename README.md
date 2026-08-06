@@ -25,8 +25,8 @@ click.
 1. Connect a project / paste a `zerops.yaml` + failing log / type a
    plain-English problem — or flip on **Watch Mode** and let DeployDoctor
    catch failures by itself.
-2. A rules engine + Claude diagnose the root cause.
-3. **Config errors:** Claude proposes a corrected `zerops.yaml` as a diff →
+2. A rules engine + an LLM (Groq, gpt-oss) diagnose the root cause.
+3. **Config errors:** the LLM proposes a corrected `zerops.yaml` as a diff →
    click Apply → redeploy via the Zerops API → status polled until healthy.
 4. **Code errors:** with repo access, DeployDoctor locates the offending file
    and line and shows a copy-paste replacement.
@@ -47,14 +47,14 @@ click.
                     ┌────────────▼─────────────────┐
                     │  api (Node.js / Express)      │
                     │  - yaml + log rules engine    │
-                    │  - Claude orchestration       │
+                    │  - Groq (gpt-oss) orchestration│
                     │  - Zerops API client          │
                     │  - GitHub source fetch (F7)   │
                     │  - status poller (F2 + F8)    │
                     └───┬───────────────┬──────────┘
                         │               │
             ┌───────────▼────┐   ┌──────▼──────────┐
-            │ Postgres        │   │ Anthropic API    │
+            │ Postgres        │   │ Groq API          │
             │ failure_patterns│   │ (diagnose / fix / │
             │ replays         │   │  route calls)     │
             │ replay_events   │   └──────────────────┘
@@ -76,7 +76,7 @@ single static container.
 
 ```
 apps/
-  api/           Express service — rules engine, Claude calls, Zerops client,
+  api/           Express service — rules engine, Groq (gpt-oss) calls, Zerops client,
                  GitHub fetch, and the six HTTP routes below
   frontend/      Next.js dashboard, replay pages, design system
   patient-app/   the "patient" — a tiny hello API DeployDoctor diagnoses live
@@ -89,7 +89,7 @@ zerops.yaml      main project: frontend + api + db
 
 | | Feature | Status |
 |---|---|---|
-| F1 | AI diagnosis (rules engine + Claude) | ✅ core |
+| F1 | AI diagnosis (rules engine + Groq gpt-oss) | ✅ core |
 | F2 | Auto-fix with diff approval, retry memory, max-3-loop guard | ✅ core |
 | F3 | Natural-language input | ✅ folded into `/api/diagnose` |
 | F4 | Learning Mode (`next_time_tip`, difficulty) | ✅ core |
@@ -112,7 +112,7 @@ pattern.
 
 | Method | Route | Purpose |
 |---|---|---|
-| POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, replay_id?}` → rules engine + Claude → diagnosis JSON |
+| POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, replay_id?}` → rules engine + LLM → diagnosis JSON |
 | POST | `/api/apply-fix` | `{replay_id, fixed_yaml}` → trigger Zerops redeploy (config errors only) |
 | GET | `/api/status/:replay_id` | poll deploy status; appends timeline events on state change |
 | GET | `/api/replay/:id` | public, read-only replay data — no auth |
@@ -138,7 +138,8 @@ npm run dev:patient          # apps/patient-app → http://localhost:3000 (use a
 
 Copy `apps/api/.env.example` to `apps/api/.env` and fill in:
 
-- `ANTHROPIC_API_KEY` — enables real Claude diagnosis (without it, the API
+- `GROQ_API_KEY` — enables real LLM diagnosis via Groq (Call A on
+  `openai/gpt-oss-120b`, Call B on `openai/gpt-oss-20b`; without it, the API
   falls back to rules-engine-only answers, which is exactly what the browser
   smoke test above exercised)
 - `ZEROPS_API_TOKEN`, `ZEROPS_PROJECT_ID`, `ZEROPS_SERVICE_ID` — enables
@@ -208,7 +209,8 @@ display, Inter for body text, JetBrains Mono for yaml/logs/diffs.
 
 ## AI-tool disclosure
 
-- **In-product:** Claude powers diagnosis, fix generation, and
+- **In-product:** Groq (`openai/gpt-oss-120b` for diagnosis/fix, `openai/gpt-oss-20b`
+  for natural-language routing) powers diagnosis, fix generation, and
   natural-language routing (`apps/api/src/lib/llm.js`) — this is the
   product, not an implementation detail.
 - **Built with:** this repository — architecture, backend, frontend, patient
