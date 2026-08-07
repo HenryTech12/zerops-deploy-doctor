@@ -22,7 +22,7 @@ router.post("/", async (req, res) => {
     if (!github.isWriteConfigured() || !process.env.PATIENT_REPO) {
       return res.status(503).json({
         error:
-          "PATIENT_REPO_TOKEN or PATIENT_REPO not configured — cannot apply the fix in this environment.",
+          "GitHub App (GITHUB_APP_ID/GITHUB_APP_PRIVATE_KEY) or PATIENT_REPO not configured — cannot apply the fix in this environment.",
       });
     }
 

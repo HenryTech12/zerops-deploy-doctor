@@ -2,6 +2,7 @@
 // locate the offending code. Read-only: DeployDoctor never writes to the repo.
 const RAW_BASE = "https://raw.githubusercontent.com";
 const API_BASE = "https://api.github.com";
+const githubApp = require("./githubApp");
 
 function parseRepoUrl(repoUrl) {
   const m = repoUrl.match(/github\.com\/([^/]+)\/([^/.#?]+)/i);
@@ -15,17 +16,16 @@ function ghHeaders() {
   return h;
 }
 
-// Separate, write-scoped token — deliberately not GITHUB_TOKEN (that one is
-// read-only and used against whatever arbitrary public repo a user pastes
-// for F7). This one is scoped to the one patient repo DeployDoctor is
-// configured to manage, and is the only credential ever used to write.
-function ghWriteHeaders() {
-  if (!process.env.PATIENT_REPO_TOKEN) {
-    throw new Error("PATIENT_REPO_TOKEN not configured");
-  }
+// Write access comes from the GitHub App's installation token (see
+// githubApp.js) — short-lived and scoped to exactly the repo(s) granted
+// when the App was installed, not a static long-lived PAT. Deliberately
+// separate from GITHUB_TOKEN above (that one is read-only and used against
+// whatever arbitrary public repo a user pastes for F7).
+async function ghWriteHeaders() {
+  const token = await githubApp.getInstallationToken();
   return {
     "User-Agent": "DeployDoctor",
-    Authorization: `Bearer ${process.env.PATIENT_REPO_TOKEN}`,
+    Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
   };
 }
@@ -38,7 +38,7 @@ function ghWriteHeaders() {
  * directly (its exact endpoint/payload shape isn't confirmed working).
  */
 async function commitFile({ owner, repo, branch, path, content, message }) {
-  const headers = ghWriteHeaders();
+  const headers = await ghWriteHeaders();
 
   const getRes = await fetch(`${API_BASE}/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
     headers,
@@ -128,5 +128,5 @@ module.exports = {
   parseRepoUrl,
   fetchRelevantSources,
   commitFile,
-  isWriteConfigured: () => Boolean(process.env.PATIENT_REPO_TOKEN),
+  isWriteConfigured: () => githubApp.isConfigured(),
 };

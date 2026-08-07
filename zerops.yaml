@@ -43,12 +43,16 @@ zerops:
         # guessed write endpoint.
         PATIENT_PROJECT_ID: <set in Zerops UI>
         PATIENT_SERVICE_ID: <set in Zerops UI>
-        # F2 apply-fix commits the corrected zerops.yaml straight to this
-        # repo/branch instead of calling Zerops's deploy API directly
+        # F2 apply-fix commits the corrected zerops.yaml straight to
+        # PATIENT_REPO instead of calling Zerops's deploy API directly
         # (confirmed live: guessing at that endpoint 404'd) — Zerops's own
-        # push-to-branch pipeline trigger redeploys it automatically.
-        # Needs write access, unlike GITHUB_TOKEN below.
-        PATIENT_REPO_TOKEN: <set in Zerops UI — needs write access to PATIENT_REPO>
+        # push-to-branch pipeline trigger redeploys it automatically. Write
+        # access comes from a GitHub App installation (see README "GitHub
+        # App setup"), not a static PAT — GITHUB_APP_PRIVATE_KEY is the
+        # .pem file's contents; replace real newlines with literal "\n" if
+        # this field doesn't accept multi-line paste.
+        GITHUB_APP_ID: <set in Zerops UI>
+        GITHUB_APP_PRIVATE_KEY: <set in Zerops UI — the GitHub App's private key .pem contents>
         GITHUB_TOKEN: <optional, set in Zerops UI for higher API rate limits>
         # Both ${db_user}/${db_password}/${db_hostname}/${db_dbName} and
         # ${db_connectionString} left this completely unset at runtime
