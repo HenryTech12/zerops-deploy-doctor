@@ -40,8 +40,13 @@ zerops:
         PATIENT_PROJECT_ID: <set in Zerops UI>
         PATIENT_SERVICE_ID: <set in Zerops UI>
         GITHUB_TOKEN: <optional, set in Zerops UI for higher API rate limits>
+        # Zerops's `db` PostgreSQL service exposes a ready-made
+        # connectionString var — reconstructing it from ${db_user}/
+        # ${db_password}/${db_hostname}/${db_dbName} left DATABASE_URL
+        # completely unset in the running container (confirmed live via
+        # runtime log: "DATABASE_URL is not set."), so use the built-in one.
+        DATABASE_URL: ${db_connectionString}
       env:
-        DATABASE_URL: postgresql://${db_user}:${db_password}@${db_hostname}:5432/${db_dbName}
         PORT: 3001
         # Left unset deliberately — the frontend's exact Zerops domain isn't
         # known until first deploy, and CORS is an exact-string match (a
