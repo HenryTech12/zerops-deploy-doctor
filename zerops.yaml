@@ -65,9 +65,14 @@ zerops:
         - cd apps/frontend && npm install && npm run build
       # No trailing "/~" — see the api service's deployFiles comment above.
       deployFiles: apps/frontend
+      # No .next/cache here (confirmed live): caching it made Zerops
+      # pre-create the .next/ directory before the build ran, and next
+      # build then failed immediately with EACCES writing .next/trace —
+      # a permissions mismatch between however the cache path gets set up
+      # and the user the build actually runs as. Letting next build create
+      # .next/ itself avoids it; costs some rebuild speed, not correctness.
       cache:
         - apps/frontend/node_modules
-        - apps/frontend/.next/cache
     run:
       base: nodejs@22
       ports:
