@@ -11,10 +11,17 @@ zerops:
         - port: 3000
           httpSupport: true
       start: npm run start
+      # DATABASE_URL as a template (${db_user}/${db_password}/${db_hostname}/
+      # ${db_dbName}) never actually resolved for the main DeployDoctor
+      # project — confirmed live it left the var completely unset at
+      # runtime despite matching Zerops's own documented syntax. Set the
+      # real, resolved value directly in this service's Environment
+      # Variables UI instead (copy "connection string, with values" from
+      # the db service's Access details page). Never commit the real value
+      # here — this file is in a public repo.
       envSecrets:
         GREETING_NAME: DeployDoctor
-      env:
-        DATABASE_URL: postgresql://${db_user}:${db_password}@${db_hostname}:5432/${db_dbName}
+        DATABASE_URL: <set in Zerops UI — paste db service's "connection string, with values" here>
 
   - setup: db
     run:
