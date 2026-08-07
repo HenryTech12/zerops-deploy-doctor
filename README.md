@@ -144,13 +144,42 @@ Copy `apps/api/.env.example` to `apps/api/.env` and fill in:
   `openai/gpt-oss-120b`, Call B on `openai/gpt-oss-20b`; without it, the API
   falls back to rules-engine-only answers, which is exactly what the browser
   smoke test above exercised)
-- `API_TOKEN`, `PATIENT_PROJECT_ID`, `PATIENT_SERVICE_ID` — enables
-  apply-fix, status polling, and Watch Mode against a real Zerops service
-  (named without a `ZEROPS_` prefix — Zerops's own dashboard rejects
-  user-defined env vars starting with it)
+- `API_TOKEN`, `PATIENT_PROJECT_ID`, `PATIENT_SERVICE_ID` — enables status
+  polling and Watch Mode against a real Zerops service (named without a
+  `ZEROPS_` prefix — Zerops's own dashboard rejects user-defined env vars
+  starting with it)
+- `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `PATIENT_REPO` — enables F2's
+  apply-fix (commits the corrected `zerops.yaml` to the patient repo via a
+  GitHub App installation token; see "GitHub App setup" below)
 - `GITHUB_TOKEN` — optional, raises F7's GitHub API rate limit
 
 The frontend reads `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:3001`).
+
+## GitHub App setup (for F2 apply-fix)
+
+DeployDoctor commits a config fix straight to the patient repo rather than
+calling Zerops's deploy API directly — that endpoint's exact shape isn't
+confirmed working, while GitHub's push already reliably triggers a Zerops
+redeploy via the pipeline trigger configured on that repo. Write access
+comes from a GitHub App installation (short-lived, scoped tokens — the same
+pattern Vercel/Netlify use), not a static personal access token:
+
+1. GitHub → Settings → Developer settings → **GitHub Apps** → **New GitHub App**
+2. Fill in a name and homepage URL; you can leave the webhook unchecked (not needed)
+3. Under **Permissions → Repository permissions**, set **Contents: Read and write**
+4. **Where can this app be installed:** "Only on this account" is fine
+5. Create the app, then **Generate a private key** — downloads a `.pem` file
+6. **Install** the app on your account, selecting only the patient repo
+7. Set `GITHUB_APP_ID` (shown on the app's settings page) and
+   `GITHUB_APP_PRIVATE_KEY` (the `.pem` file's contents — if your env var UI
+   doesn't accept multi-line values, replace real newlines with literal
+   `\n`, the code un-escapes either form) on the `api` service
+
+`apps/api/src/lib/githubApp.js` signs a JWT with that key and exchanges it
+for a ~1-hour installation access token on demand — single-tenant by
+design (one App, one installation, looked up and cached), since a
+multi-user version would need stored installation mappings and sessions
+DeployDoctor doesn't have (see roadmap).
 
 ## The patient app
 
@@ -198,15 +227,14 @@ display, Inter for body text, JetBrains Mono for yaml/logs/diffs.
   Zerops dashboard.
 - **Level 3 learning:** fine-tuning or a learned fix-ranking model on top of
   the `failed_fixes` table (F9 today is prompt injection only, by design).
-- **GitHub App-based repo connection:** today, F2's apply-fix commits to one
-  repo configured once via a manually-created write-scoped token
-  (`PATIENT_REPO`/`PATIENT_REPO_TOKEN`) — that's a single-project demo
-  setup, not a general "connect any repo" flow. A real version would use a
-  GitHub App (like Vercel/Netlify/Render) so users install it and pick
-  exactly which repos to grant access to, getting short-lived scoped
-  installation tokens instead of a static PAT. This also needs something
-  DeployDoctor doesn't have today — user accounts/sessions, since replays
-  are currently anonymous and public by design.
+- **Multi-tenant repo connections:** F2's apply-fix already uses a real
+  GitHub App with short-lived installation tokens (see "GitHub App setup"),
+  but it's single-tenant — one App, one installation, one repo, configured
+  once server-side. A general "connect any repo" version would need a
+  per-user install flow (`/auth/github/install` → callback → stored
+  installation mapping) and, more fundamentally, something DeployDoctor
+  doesn't have today: user accounts/sessions, since replays are currently
+  anonymous and public by design.
 
 ## Known limitations
 
