@@ -9,12 +9,17 @@ zerops:
       # resolve `pg` at runtime.
       buildCommands:
         - npm install
+      # No trailing "/~" — that flattens a directory's contents into the
+      # deploy root instead of preserving its path (confirmed live: it broke
+      # `node apps/api/src/index.js` / `db/migrate.js` with MODULE_NOT_FOUND).
+      # Plain paths preserve the tree, matching the relative paths our start
+      # command and require()s expect.
       deployFiles:
         - package.json
         - package-lock.json
-        - node_modules/~
-        - apps/api/~
-        - db/~
+        - node_modules
+        - apps/api
+        - db
       cache:
         - node_modules
     run:
@@ -47,7 +52,8 @@ zerops:
       base: nodejs@22
       buildCommands:
         - cd apps/frontend && npm install && npm run build
-      deployFiles: apps/frontend/~
+      # No trailing "/~" — see the api service's deployFiles comment above.
+      deployFiles: apps/frontend
       cache:
         - apps/frontend/node_modules
         - apps/frontend/.next/cache
