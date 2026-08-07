@@ -64,7 +64,12 @@ zerops:
       buildCommands:
         - cd apps/frontend && npm install && npm run build
       # No trailing "/~" — see the api service's deployFiles comment above.
-      deployFiles: apps/frontend
+      # node_modules listed explicitly, not assumed to come along with the
+      # parent path — the api service needed the same explicit listing
+      # (confirmed live: without it, "sh: next: not found" at runtime).
+      deployFiles:
+        - apps/frontend
+        - apps/frontend/node_modules
       # No .next/cache here (confirmed live): caching it made Zerops
       # pre-create the .next/ directory before the build ran, and next
       # build then failed immediately with EACCES writing .next/trace —
