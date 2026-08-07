@@ -198,6 +198,15 @@ display, Inter for body text, JetBrains Mono for yaml/logs/diffs.
   Zerops dashboard.
 - **Level 3 learning:** fine-tuning or a learned fix-ranking model on top of
   the `failed_fixes` table (F9 today is prompt injection only, by design).
+- **GitHub App-based repo connection:** today, F2's apply-fix commits to one
+  repo configured once via a manually-created write-scoped token
+  (`PATIENT_REPO`/`PATIENT_REPO_TOKEN`) — that's a single-project demo
+  setup, not a general "connect any repo" flow. A real version would use a
+  GitHub App (like Vercel/Netlify/Render) so users install it and pick
+  exactly which repos to grant access to, getting short-lived scoped
+  installation tokens instead of a static PAT. This also needs something
+  DeployDoctor doesn't have today — user accounts/sessions, since replays
+  are currently anonymous and public by design.
 
 ## Known limitations
 
