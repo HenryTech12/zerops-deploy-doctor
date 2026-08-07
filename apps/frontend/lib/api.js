@@ -2,7 +2,7 @@
 // that env var on the hosting platform's dashboard (wrong path, build-cache
 // reuse of an old baked value) repeatedly caused silent 404s that were hard
 // to diagnose from the client alone. Change this constant directly instead.
-const API_URL = "https://test-iea9.onrender.com";
+const API_URL = "https://api-2ab2-3001.prg1.zerops.app";
 
 async function request(path, options) {
   const res = await fetch(`${API_URL}${path}`, {
