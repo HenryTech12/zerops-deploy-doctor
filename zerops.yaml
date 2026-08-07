@@ -40,12 +40,14 @@ zerops:
         PATIENT_PROJECT_ID: <set in Zerops UI>
         PATIENT_SERVICE_ID: <set in Zerops UI>
         GITHUB_TOKEN: <optional, set in Zerops UI for higher API rate limits>
-        # Zerops's `db` PostgreSQL service exposes a ready-made
-        # connectionString var — reconstructing it from ${db_user}/
-        # ${db_password}/${db_hostname}/${db_dbName} left DATABASE_URL
-        # completely unset in the running container (confirmed live via
-        # runtime log: "DATABASE_URL is not set."), so use the built-in one.
-        DATABASE_URL: ${db_connectionString}
+        # Both ${db_user}/${db_password}/${db_hostname}/${db_dbName} and
+        # ${db_connectionString} left this completely unset at runtime
+        # (confirmed live: "DATABASE_URL is not set.") despite matching
+        # Zerops's own documented reference syntax — set the real, resolved
+        # value directly in the api service's Environment Variables UI
+        # instead (same as every other secret here). Never put the actual
+        # value here — this file is in a public repo.
+        DATABASE_URL: <set in Zerops UI — paste db service's "connection string, with values" here>
       env:
         PORT: 3001
         # Left unset deliberately — the frontend's exact Zerops domain isn't
