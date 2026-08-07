@@ -30,6 +30,19 @@ async function matchFailurePattern(yamlText, logText) {
   const haystack = `${yamlText || ""}\n${logText || ""}`;
   if (!haystack.trim()) return { pattern: null, hint: null };
 
+  // Static yaml checks run first and take priority over log-text regex
+  // matching: "ports declared with no httpSupport: true anywhere" is a
+  // deterministic fact about the yaml, not a guess from ambiguous log
+  // wording. A generic "502 / check your port" page (what Zerops's own
+  // error page actually says) reads identically for this and for a real
+  // port mismatch — log-text matching alone picked the wrong one live.
+  if (staticYamlChecks(yamlText).length > 0) {
+    const { rows } = await query(
+      "SELECT * FROM failure_patterns WHERE title = 'Missing `httpSupport: true` on the exposed port'"
+    );
+    if (rows[0]) return { pattern: rows[0], hint: null };
+  }
+
   const { rows: patterns } = await query(
     "SELECT * FROM failure_patterns WHERE signature IS NOT NULL"
   );
