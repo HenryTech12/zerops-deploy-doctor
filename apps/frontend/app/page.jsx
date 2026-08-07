@@ -8,6 +8,7 @@ import CodeFixCard from "../components/CodeFixCard";
 import Timeline from "../components/Timeline";
 import StatsTiles from "../components/StatsTiles";
 import WatchToggle from "../components/WatchToggle";
+import ConnectRepo from "../components/ConnectRepo";
 import { diagnose, applyFix, getStatus, getPatternStats, getReplay } from "../lib/api";
 
 const STATUS_POLL_MS = 4000;
@@ -120,6 +121,8 @@ export default function Dashboard() {
         </div>
         <WatchToggle onCaught={onWatchCaught} />
       </header>
+
+      <ConnectRepo />
 
       {error && (
         <div className="rounded-md border border-coral/40 bg-coral/10 text-coral text-sm p-3">

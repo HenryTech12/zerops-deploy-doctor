@@ -98,7 +98,51 @@ async function getInstallationToken() {
   return cachedToken.token;
 }
 
+let cachedAppInfo = null;
+
+/** The App's own public metadata (slug, name, html_url) — used to build the
+ * "install this App" link without hardcoding a slug that could drift from
+ * whatever name was actually available when the App was registered. */
+async function getAppInfo() {
+  if (cachedAppInfo) return cachedAppInfo;
+
+  const res = await fetch(`${API_BASE}/app`, { headers: appHeaders() });
+  if (!res.ok) {
+    throw new Error(`GitHub App info lookup failed: ${res.status} ${await res.text()}`);
+  }
+  cachedAppInfo = await res.json();
+  return cachedAppInfo;
+}
+
+/** Every repo this App's single installation currently has access to. */
+async function listInstallationRepos() {
+  // getInstallationToken() calls getInstallationId() internally, which is
+  // where the clear "install the App first" error surfaces if there's no
+  // installation yet.
+  const token = await getInstallationToken();
+  const res = await fetch(`${API_BASE}/installation/repositories`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "DeployDoctor",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`GitHub installation repos lookup failed: ${res.status} ${await res.text()}`);
+  }
+  const data = await res.json();
+  return (data.repositories || []).map((r) => ({
+    owner: r.owner.login,
+    repo: r.name,
+    full_name: r.full_name,
+    default_branch: r.default_branch,
+    private: r.private,
+  }));
+}
+
 module.exports = {
   getInstallationToken,
+  getAppInfo,
+  listInstallationRepos,
   isConfigured: () => Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY),
 };

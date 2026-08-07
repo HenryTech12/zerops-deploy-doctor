@@ -6,6 +6,7 @@
 const express = require("express");
 const github = require("../lib/github");
 const replays = require("../lib/replays");
+const repoConnection = require("../lib/repoConnection");
 
 const router = express.Router();
 
@@ -19,16 +20,15 @@ router.post("/", async (req, res) => {
   if (!replay) return res.status(404).json({ error: "Unknown replay_id." });
 
   try {
-    if (!github.isWriteConfigured() || !process.env.PATIENT_REPO) {
+    const connection = github.isWriteConfigured() ? await repoConnection.getConnection() : null;
+    if (!connection) {
       return res.status(503).json({
         error:
-          "GitHub App (GITHUB_APP_ID/GITHUB_APP_PRIVATE_KEY) or PATIENT_REPO not configured — cannot apply the fix in this environment.",
+          "No repo connected — connect a repo in the DeployDoctor UI (or configure GITHUB_APP_ID/GITHUB_APP_PRIVATE_KEY and PATIENT_REPO) before applying a fix.",
       });
     }
 
-    const [owner, repo] = process.env.PATIENT_REPO.split("/");
-    const branch = process.env.PATIENT_REPO_BRANCH || "main";
-    const path = process.env.PATIENT_REPO_YAML_PATH || "zerops.yaml";
+    const { owner, repo, branch, yaml_path: path } = connection;
 
     await github.commitFile({
       owner,

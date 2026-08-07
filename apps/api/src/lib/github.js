@@ -64,6 +64,21 @@ async function commitFile({ owner, repo, branch, path, content, message }) {
   return putRes.json();
 }
 
+/** Yaml/yml files in an installation-accessible repo, for the "Connect repo"
+ * file picker — uses the App's installation token (not GITHUB_TOKEN) so it
+ * also works for private repos the App was installed on. */
+async function listInstallationYamlFiles(owner, repo, branch) {
+  const headers = await ghWriteHeaders();
+  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, {
+    headers,
+  });
+  if (!res.ok) throw new Error(`GitHub tree fetch failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return (data.tree || [])
+    .filter((n) => n.type === "blob" && /\.ya?ml$/i.test(n.path))
+    .map((n) => n.path);
+}
+
 async function getDefaultBranch(owner, repo) {
   const res = await fetch(`${API_BASE}/repos/${owner}/${repo}`, { headers: ghHeaders() });
   if (!res.ok) throw new Error(`GitHub repo lookup failed: ${res.status}`);
@@ -128,5 +143,8 @@ module.exports = {
   parseRepoUrl,
   fetchRelevantSources,
   commitFile,
+  listInstallationYamlFiles,
+  getAppInfo: () => githubApp.getAppInfo(),
+  listInstallationRepos: () => githubApp.listInstallationRepos(),
   isWriteConfigured: () => githubApp.isConfigured(),
 };

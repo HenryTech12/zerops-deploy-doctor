@@ -47,4 +47,27 @@ export function getWatchStatus() {
   return request("/api/watch/status");
 }
 
+export function getGithubAppInfo() {
+  return request("/api/github/app-info");
+}
+
+export function listGithubRepos() {
+  return request("/api/github/repos");
+}
+
+export function listGithubRepoFiles(owner, repo, branch) {
+  return request(`/api/github/repos/${owner}/${repo}/files?branch=${encodeURIComponent(branch)}`);
+}
+
+export function getGithubConnection() {
+  return request("/api/github/connection");
+}
+
+export function saveGithubConnection({ owner, repo, branch, yaml_path }) {
+  return request("/api/github/connection", {
+    method: "POST",
+    body: JSON.stringify({ owner, repo, branch, yaml_path }),
+  });
+}
+
 export { API_URL };

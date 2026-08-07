@@ -10,6 +10,7 @@ const statusRoute = require("./routes/status");
 const replayRoute = require("./routes/replay");
 const patternsRoute = require("./routes/patterns");
 const watchRoute = require("./routes/watch");
+const githubRoute = require("./routes/github");
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "*" }));
@@ -28,6 +29,7 @@ app.use("/api/status", statusRoute);
 app.use("/api/replay", replayRoute); // public, no auth — F6
 app.use("/api/patterns", patternsRoute);
 app.use("/api/watch", watchRoute); // F8 — page-open polling only
+app.use("/api/github", githubRoute); // Connect repo — GitHub App install + repo/file picker
 
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);

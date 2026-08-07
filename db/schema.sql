@@ -41,3 +41,16 @@ CREATE TABLE IF NOT EXISTS replay_events (
 
 CREATE INDEX IF NOT EXISTS idx_replay_events_replay_id ON replay_events(replay_id);
 CREATE INDEX IF NOT EXISTS idx_failed_fixes_pattern_id ON failed_fixes(pattern_id);
+
+-- Singleton row (id always 1) — which repo/branch/file F2 apply-fix commits
+-- to, set via the "Connect repo" UI instead of the old static PATIENT_REPO
+-- env var. Single-tenant app (one GitHub App installation), so one active
+-- connection is enough — no need for a per-user table.
+CREATE TABLE IF NOT EXISTS repo_connection (
+  id         INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  owner      TEXT NOT NULL,
+  repo       TEXT NOT NULL,
+  branch     TEXT NOT NULL DEFAULT 'main',
+  yaml_path  TEXT NOT NULL DEFAULT 'zerops.yaml',
+  updated_at TIMESTAMPTZ DEFAULT now()
+);

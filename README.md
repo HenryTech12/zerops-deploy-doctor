@@ -120,6 +120,11 @@ pattern.
 | GET | `/api/replay/:id` | public, read-only replay data — no auth |
 | GET | `/api/patterns/:id/stats` | F5 stat-tile data |
 | GET | `/api/watch/status` | F8 — polled every ~30s while Watch Mode is on |
+| GET | `/api/github/app-info` | GitHub App slug + install URL, for the "Connect repo" button |
+| GET | `/api/github/repos` | repos the App's installation currently has access to |
+| GET | `/api/github/repos/:owner/:repo/files` | yaml/yml files in that repo, for the file picker |
+| GET | `/api/github/connection` | the currently connected owner/repo/branch/file |
+| POST | `/api/github/connection` | `{owner, repo, branch?, yaml_path?}` → save the active connection |
 
 ## Running locally
 
@@ -148,9 +153,11 @@ Copy `apps/api/.env.example` to `apps/api/.env` and fill in:
   polling and Watch Mode against a real Zerops service (named without a
   `ZEROPS_` prefix — Zerops's own dashboard rejects user-defined env vars
   starting with it)
-- `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `PATIENT_REPO` — enables F2's
-  apply-fix (commits the corrected `zerops.yaml` to the patient repo via a
-  GitHub App installation token; see "GitHub App setup" below)
+- `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` — enables F2's apply-fix (commits
+  the corrected `zerops.yaml` to whichever repo is connected via the
+  dashboard's "Connect repo" UI, using a GitHub App installation token; see
+  "GitHub App setup" below). `PATIENT_REPO`/`PATIENT_REPO_BRANCH` are an
+  optional fallback used only until a connection is saved through the UI.
 - `GITHUB_TOKEN` — optional, raises F7's GitHub API rate limit
 
 The frontend reads `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:3001`).
@@ -169,17 +176,22 @@ pattern Vercel/Netlify use), not a static personal access token:
 3. Under **Permissions → Repository permissions**, set **Contents: Read and write**
 4. **Where can this app be installed:** "Only on this account" is fine
 5. Create the app, then **Generate a private key** — downloads a `.pem` file
-6. **Install** the app on your account, selecting only the patient repo
-7. Set `GITHUB_APP_ID` (shown on the app's settings page) and
+6. Set `GITHUB_APP_ID` (shown on the app's settings page) and
    `GITHUB_APP_PRIVATE_KEY` (the `.pem` file's contents — if your env var UI
    doesn't accept multi-line values, replace real newlines with literal
    `\n`, the code un-escapes either form) on the `api` service
 
 `apps/api/src/lib/githubApp.js` signs a JWT with that key and exchanges it
-for a ~1-hour installation access token on demand — single-tenant by
-design (one App, one installation, looked up and cached), since a
-multi-user version would need stored installation mappings and sessions
-DeployDoctor doesn't have (see roadmap).
+for a ~1-hour installation access token on demand.
+
+You don't need to manually install the App on a repo — the dashboard's
+**Connect repo** panel links straight to GitHub's own "Install/manage" page
+for the App (same flow Vercel/Netlify use). After installing on one or more
+repos there, back in DeployDoctor: **Refresh repo list** → pick the repo,
+branch, and yaml file → **Save connection**. That connection (stored in the
+`repo_connection` table) is what F2's apply-fix commits to; single-tenant by
+design (one App, one installation, one active connection at a time — see
+roadmap for multi-user).
 
 ## The patient app
 
@@ -228,13 +240,14 @@ display, Inter for body text, JetBrains Mono for yaml/logs/diffs.
 - **Level 3 learning:** fine-tuning or a learned fix-ranking model on top of
   the `failed_fixes` table (F9 today is prompt injection only, by design).
 - **Multi-tenant repo connections:** F2's apply-fix already uses a real
-  GitHub App with short-lived installation tokens (see "GitHub App setup"),
-  but it's single-tenant — one App, one installation, one repo, configured
-  once server-side. A general "connect any repo" version would need a
-  per-user install flow (`/auth/github/install` → callback → stored
-  installation mapping) and, more fundamentally, something DeployDoctor
-  doesn't have today: user accounts/sessions, since replays are currently
-  anonymous and public by design.
+  GitHub App with short-lived installation tokens and a dashboard "Connect
+  repo" UI (pick the repo/branch/file, not hardcoded — see "GitHub App
+  setup"), but it's single-tenant — one App, one installation, one active
+  connection shared by everyone who opens the dashboard. A general
+  "connect any repo, per user" version would need per-user install
+  callbacks and, more fundamentally, something DeployDoctor doesn't have
+  today: user accounts/sessions, since replays are currently anonymous and
+  public by design.
 
 ## Known limitations
 
