@@ -61,14 +61,25 @@ zerops:
   - setup: frontend
     build:
       base: nodejs@22
+      # Installed from the repo root (matching the api service), not a
+      # scoped `cd apps/frontend && npm install` — nested apps/frontend/
+      # node_modules was never reliably deployable (see history below);
+      # root-level node_modules is Node's normal ancestor-resolution path
+      # AND the one pattern proven to actually work in this project.
       buildCommands:
-        - cd apps/frontend && npm install && npm run build
-      # No trailing "/~" — see the api service's deployFiles comment above.
-      # Just the parent path — listing apps/frontend/node_modules as its
-      # own entry (nested under an already-listed parent) failed validation
-      # live ("Files/folders listed in build.deployFiles do not exist"),
-      # unlike the api service where node_modules was a sibling, not nested.
-      deployFiles: apps/frontend
+        - npm install
+        - cd apps/frontend && npm run build
+      # A nested apps/frontend/node_modules never made it into the deployed
+      # container, whether relying on the parent apps/frontend entry alone
+      # (runtime: "Cannot find module '.../apps/frontend/node_modules/...'")
+      # or listing it explicitly (build validation: "Files/folders listed
+      # in build.deployFiles do not exist"). Root-level node_modules is the
+      # one pattern confirmed working (api uses it too).
+      deployFiles:
+        - package.json
+        - package-lock.json
+        - node_modules
+        - apps/frontend
       # No .next/cache here (confirmed live): caching it made Zerops
       # pre-create the .next/ directory before the build ran, and next
       # build then failed immediately with EACCES writing .next/trace —
@@ -76,7 +87,7 @@ zerops:
       # and the user the build actually runs as. Letting next build create
       # .next/ itself avoids it; costs some rebuild speed, not correctness.
       cache:
-        - apps/frontend/node_modules
+        - node_modules
     run:
       base: nodejs@22
       ports:
@@ -87,12 +98,13 @@ zerops:
       # `npm --prefix apps/frontend run start` got past that but then hit
       # "sh: next: not found" (npm's own PATH handling for --prefix is a
       # known trouble spot). Invoking next's actual entry script directly
-      # sidesteps both PATH and npm's script-runner entirely. The directory
-      # is passed positionally (`next start [directory]`) since Zerops execs
-      # this from the deploy root, not apps/frontend, and next start looks
-      # for .next/ relative to cwd (or that argument) by default — verified
-      # locally running from repo root exactly as Zerops would.
-      start: node apps/frontend/node_modules/next/dist/bin/next start apps/frontend -p 3000
+      # (from root-level node_modules, per above) sidesteps both PATH and
+      # npm's script-runner entirely. The directory is passed positionally
+      # (`next start [directory]`) since Zerops execs this from the deploy
+      # root, not apps/frontend, and next start looks for .next/ relative
+      # to cwd (or that argument) by default — verified locally running
+      # this exact command from repo root.
+      start: node node_modules/next/dist/bin/next start apps/frontend -p 3000
       # No NEXT_PUBLIC_API_URL here: apps/frontend/lib/api.js hardcodes the
       # API base directly (a stale/wrong env var here repeatedly caused
       # silent 404s on Vercel — see that file's comment). Deploy the api
