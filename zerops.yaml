@@ -39,8 +39,16 @@ zerops:
         API_TOKEN: <set in Zerops UI — your personal Zerops API token, not a service secret>
         # These identify the PATIENT app's project/service (a separate
         # Zerops project — see apps/patient-app), not this api service.
+        # Used for status polling (F8) — read-only, lower risk than a
+        # guessed write endpoint.
         PATIENT_PROJECT_ID: <set in Zerops UI>
         PATIENT_SERVICE_ID: <set in Zerops UI>
+        # F2 apply-fix commits the corrected zerops.yaml straight to this
+        # repo/branch instead of calling Zerops's deploy API directly
+        # (confirmed live: guessing at that endpoint 404'd) — Zerops's own
+        # push-to-branch pipeline trigger redeploys it automatically.
+        # Needs write access, unlike GITHUB_TOKEN below.
+        PATIENT_REPO_TOKEN: <set in Zerops UI — needs write access to PATIENT_REPO>
         GITHUB_TOKEN: <optional, set in Zerops UI for higher API rate limits>
         # Both ${db_user}/${db_password}/${db_hostname}/${db_dbName} and
         # ${db_connectionString} left this completely unset at runtime
@@ -52,6 +60,8 @@ zerops:
         DATABASE_URL: <set in Zerops UI — paste db service's "connection string, with values" here>
       env:
         PORT: 3001
+        PATIENT_REPO: HenryTech12/deploydoctor-patient-app
+        PATIENT_REPO_BRANCH: main
         # Left unset deliberately — the frontend's exact Zerops domain isn't
         # known until first deploy, and CORS is an exact-string match (a
         # trailing slash or wrong path silently breaks every request, as we

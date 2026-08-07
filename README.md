@@ -27,7 +27,9 @@ click.
    catch failures by itself.
 2. A rules engine + an LLM (Groq, gpt-oss) diagnose the root cause.
 3. **Config errors:** the LLM proposes a corrected `zerops.yaml` as a diff →
-   click Apply → redeploy via the Zerops API → status polled until healthy.
+   click Apply → the fix is committed straight to the patient repo →
+   Zerops's own push-to-branch pipeline trigger redeploys it → status
+   polled until healthy.
 4. **Code errors:** with repo access, DeployDoctor locates the offending file
    and line and shows a copy-paste replacement.
 5. Every cycle lands on the **Deploy Replay Timeline** — a public, shareable
@@ -113,7 +115,7 @@ pattern.
 | Method | Route | Purpose |
 |---|---|---|
 | POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, replay_id?}` → rules engine + LLM → diagnosis JSON |
-| POST | `/api/apply-fix` | `{replay_id, fixed_yaml}` → trigger Zerops redeploy (config errors only) |
+| POST | `/api/apply-fix` | `{replay_id, fixed_yaml}` → commit the fix to the patient repo, Zerops redeploys on push (config errors only) |
 | GET | `/api/status/:replay_id` | poll deploy status; appends timeline events on state change |
 | GET | `/api/replay/:id` | public, read-only replay data — no auth |
 | GET | `/api/patterns/:id/stats` | F5 stat-tile data |
@@ -200,10 +202,13 @@ display, Inter for body text, JetBrains Mono for yaml/logs/diffs.
 ## Known limitations
 
 - The exact Zerops REST API field names used by `apps/api/src/lib/zerops.js`
-  (service status, deploy logs, redeploy trigger payload) are written
-  against the public API docs and may need a small adjustment once pinned
-  to a live Zerops project — the client is deliberately isolated in one file
-  for that reason.
+  for service status and deploy logs (F8 Watch Mode) are written against
+  the public API docs and may need adjustment against a live project — the
+  client is deliberately isolated in one file for that reason. F2's
+  apply-fix deliberately avoids this risk entirely: confirmed live that
+  guessing at Zerops's deploy-trigger endpoint 404'd, so it commits the fix
+  to the patient repo instead and lets Zerops's own proven push-to-branch
+  pipeline trigger handle the redeploy.
 - `apps/frontend` depends on Next.js 14.2.35 (the latest patched 14.x
   release); a handful of advisories in Next's own bundled build-time
   `postcss` remain open upstream until a Next 16 major upgrade — not

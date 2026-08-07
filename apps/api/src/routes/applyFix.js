@@ -1,8 +1,10 @@
-// POST /api/apply-fix — {replay_id, fixed_yaml} -> trigger Zerops redeploy, start polling.
-// Config errors only. Nothing here runs without this explicit call, which the
-// frontend only sends on an explicit user click on the diff viewer (F2 human-in-the-loop).
+// POST /api/apply-fix — {replay_id, fixed_yaml} -> commit the fix to the
+// patient repo, letting Zerops's own push-to-branch pipeline trigger
+// redeploy it. Config errors only. Nothing here runs without this explicit
+// call, which the frontend only sends on an explicit user click on the diff
+// viewer (F2 human-in-the-loop).
 const express = require("express");
-const zerops = require("../lib/zerops");
+const github = require("../lib/github");
 const replays = require("../lib/replays");
 
 const router = express.Router();
@@ -17,13 +19,25 @@ router.post("/", async (req, res) => {
   if (!replay) return res.status(404).json({ error: "Unknown replay_id." });
 
   try {
-    if (!zerops.isConfigured()) {
+    if (!github.isWriteConfigured() || !process.env.PATIENT_REPO) {
       return res.status(503).json({
-        error: "API_TOKEN not configured — cannot trigger a redeploy in this environment.",
+        error:
+          "PATIENT_REPO_TOKEN or PATIENT_REPO not configured — cannot apply the fix in this environment.",
       });
     }
 
-    await zerops.triggerRedeploy(process.env.PATIENT_SERVICE_ID, process.env.PATIENT_PROJECT_ID, fixed_yaml);
+    const [owner, repo] = process.env.PATIENT_REPO.split("/");
+    const branch = process.env.PATIENT_REPO_BRANCH || "main";
+    const path = process.env.PATIENT_REPO_YAML_PATH || "zerops.yaml";
+
+    await github.commitFile({
+      owner,
+      repo,
+      branch,
+      path,
+      content: fixed_yaml,
+      message: `DeployDoctor: apply fix for replay ${replay_id}`,
+    });
 
     // Reuses the current attempt's number — apply-fix is a state transition
     // (diagnosed -> pending) within the same diagnose/fix/redeploy cycle, not
@@ -36,7 +50,7 @@ router.post("/", async (req, res) => {
       attemptN,
       status: "pending",
       errorType: "config",
-      cause: "Redeploy triggered with approved fix",
+      cause: "Fix committed to the repo, redeploy pipeline should pick it up",
       fixSummary: "Applied fixed zerops.yaml, awaiting deploy result",
       patternId: pattern_id || null,
     });
@@ -44,7 +58,7 @@ router.post("/", async (req, res) => {
     res.json({ ok: true, replay_id, attempt_n: attemptN, event, applied_at: Date.now() });
   } catch (err) {
     console.error("apply-fix error:", err);
-    res.status(500).json({ error: "Failed to trigger redeploy", detail: err.message });
+    res.status(500).json({ error: "Failed to apply fix", detail: err.message });
   }
 });
 

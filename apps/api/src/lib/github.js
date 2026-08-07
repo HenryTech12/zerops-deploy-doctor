@@ -15,6 +15,55 @@ function ghHeaders() {
   return h;
 }
 
+// Separate, write-scoped token — deliberately not GITHUB_TOKEN (that one is
+// read-only and used against whatever arbitrary public repo a user pastes
+// for F7). This one is scoped to the one patient repo DeployDoctor is
+// configured to manage, and is the only credential ever used to write.
+function ghWriteHeaders() {
+  if (!process.env.PATIENT_REPO_TOKEN) {
+    throw new Error("PATIENT_REPO_TOKEN not configured");
+  }
+  return {
+    "User-Agent": "DeployDoctor",
+    Authorization: `Bearer ${process.env.PATIENT_REPO_TOKEN}`,
+    Accept: "application/vnd.github+json",
+  };
+}
+
+/**
+ * Commits new file content via the Contents API — used by F2's apply-fix to
+ * push a corrected zerops.yaml straight to the patient repo. Zerops's own
+ * already-configured "push to branch" pipeline trigger picks it up and
+ * redeploys automatically; DeployDoctor never calls Zerops's deploy API
+ * directly (its exact endpoint/payload shape isn't confirmed working).
+ */
+async function commitFile({ owner, repo, branch, path, content, message }) {
+  const headers = ghWriteHeaders();
+
+  const getRes = await fetch(`${API_BASE}/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
+    headers,
+  });
+  if (!getRes.ok) {
+    throw new Error(`GitHub file lookup failed: ${getRes.status} ${await getRes.text()}`);
+  }
+  const current = await getRes.json();
+
+  const putRes = await fetch(`${API_BASE}/repos/${owner}/${repo}/contents/${path}`, {
+    method: "PUT",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      content: Buffer.from(content, "utf8").toString("base64"),
+      sha: current.sha,
+      branch,
+    }),
+  });
+  if (!putRes.ok) {
+    throw new Error(`GitHub commit failed: ${putRes.status} ${await putRes.text()}`);
+  }
+  return putRes.json();
+}
+
 async function getDefaultBranch(owner, repo) {
   const res = await fetch(`${API_BASE}/repos/${owner}/${repo}`, { headers: ghHeaders() });
   if (!res.ok) throw new Error(`GitHub repo lookup failed: ${res.status}`);
@@ -75,4 +124,9 @@ async function fetchRelevantSources(repoUrl, maxFiles = 4) {
     .join("\n\n");
 }
 
-module.exports = { parseRepoUrl, fetchRelevantSources };
+module.exports = {
+  parseRepoUrl,
+  fetchRelevantSources,
+  commitFile,
+  isWriteConfigured: () => Boolean(process.env.PATIENT_REPO_TOKEN),
+};
