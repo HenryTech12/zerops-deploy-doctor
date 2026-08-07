@@ -78,7 +78,11 @@ zerops:
       ports:
         - port: 3000
           httpSupport: true
-      start: cd apps/frontend && npm run start
+      # No `cd` here — confirmed live that Zerops execs `start:` directly,
+      # not through a shell, so `cd` (a shell builtin, not a real binary)
+      # fails with "exec: cd: not found" (exit 127). `npm --prefix`
+      # achieves the same directory change without needing a shell.
+      start: npm --prefix apps/frontend run start
       # No NEXT_PUBLIC_API_URL here: apps/frontend/lib/api.js hardcodes the
       # API base directly (a stale/wrong env var here repeatedly caused
       # silent 404s on Vercel — see that file's comment). Deploy the api
