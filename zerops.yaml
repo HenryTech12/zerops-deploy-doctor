@@ -27,9 +27,11 @@ zerops:
       ports:
         - port: 3001
           httpSupport: true
-      # Runs the (idempotent) schema + seed on every deploy, same fix that
-      # unblocked the Render deployment — no manual migration step ever.
-      start: npm run db:migrate && npm run db:seed && node apps/api/src/index.js
+      # apps/api/src/index.js runs migrate+seed in-process before listening —
+      # NOT chained here with `&&` (confirmed live: Zerops's supervisor
+      # didn't reliably continue past the first chained command, so
+      # db:seed/the server were never reached).
+      start: node apps/api/src/index.js
       # Names deliberately avoid the ZEROPS_ prefix — the Zerops dashboard
       # rejects user-defined env vars starting with it (confirmed live).
       envSecrets:

@@ -4,11 +4,10 @@ const path = require("path");
 const { Client } = require("pg");
 const { resolveConnectionString } = require("./pgSsl");
 
-async function main() {
+async function migrate() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    console.error("DATABASE_URL is not set.");
-    process.exit(1);
+    throw new Error("DATABASE_URL is not set.");
   }
 
   const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
@@ -22,7 +21,13 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("Migration failed:", err.message);
-  process.exit(1);
-});
+// Run directly (e.g. `npm run db:migrate`) as a standalone script; when
+// required as a module (see apps/api/src/index.js), only `migrate` runs.
+if (require.main === module) {
+  migrate().catch((err) => {
+    console.error("Migration failed:", err.message);
+    process.exit(1);
+  });
+}
+
+module.exports = { migrate };

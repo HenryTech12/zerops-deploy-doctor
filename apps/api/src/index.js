@@ -1,6 +1,8 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const { migrate } = require("../../../db/migrate");
+const { seed } = require("../../../db/seed");
 
 const diagnoseRoute = require("./routes/diagnose");
 const applyFixRoute = require("./routes/applyFix");
@@ -32,7 +34,23 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-const port = process.env.PORT || 3001;
-app.listen(port, () => {
-  console.log(`DeployDoctor API listening on :${port}`);
+// Migrate + seed run in-process, inside this same long-running node
+// invocation, rather than as separate `npm run` steps chained with `&&` in
+// the platform's start command — Zerops's process supervisor was observed
+// treating the first chained command's exit as "the start command finished"
+// and never reaching the later steps, so nothing here can depend on shell
+// chaining to reach app.listen().
+async function start() {
+  await migrate();
+  await seed();
+
+  const port = process.env.PORT || 3001;
+  app.listen(port, () => {
+    console.log(`DeployDoctor API listening on :${port}`);
+  });
+}
+
+start().catch((err) => {
+  console.error("Startup failed:", err.message);
+  process.exit(1);
 });
