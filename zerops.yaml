@@ -2,28 +2,45 @@ zerops:
   - setup: api
     build:
       base: nodejs@22
+      # Installed from the repo root (not `cd apps/api`) so the resulting
+      # node_modules is an ancestor of BOTH apps/api/src/*.js and
+      # db/migrate.js|seed.js — the latter live outside apps/api/, so a
+      # scoped `cd apps/api && npm install` would leave them unable to
+      # resolve `pg` at runtime.
       buildCommands:
-        - cd apps/api && npm install
+        - npm install
       deployFiles:
+        - package.json
+        - package-lock.json
+        - node_modules/~
         - apps/api/~
         - db/~
       cache:
-        - apps/api/node_modules
+        - node_modules
     run:
       base: nodejs@22
       ports:
         - port: 3001
           httpSupport: true
-      start: node apps/api/src/index.js
+      # Runs the (idempotent) schema + seed on every deploy, same fix that
+      # unblocked the Render deployment — no manual migration step ever.
+      start: npm run db:migrate && npm run db:seed && node apps/api/src/index.js
       envSecrets:
         GROQ_API_KEY: <set in Zerops UI>
-        ZEROPS_API_TOKEN: <set in Zerops UI>
+        ZEROPS_API_TOKEN: <set in Zerops UI — personal API token, not a service secret>
+        # These identify the PATIENT app's project/service (a separate
+        # Zerops project — see apps/patient-app), not this api service.
         ZEROPS_PROJECT_ID: <set in Zerops UI>
+        ZEROPS_SERVICE_ID: <set in Zerops UI>
         GITHUB_TOKEN: <optional, set in Zerops UI for higher API rate limits>
       env:
         DATABASE_URL: postgresql://${db_user}:${db_password}@${db_hostname}:5432/${db_dbName}
         PORT: 3001
-        FRONTEND_ORIGIN: https://frontend.zerops.app
+        # Left unset deliberately — the frontend's exact Zerops domain isn't
+        # known until first deploy, and CORS is an exact-string match (a
+        # trailing slash or wrong path silently breaks every request, as we
+        # found on Render). Defaults to permissive (*) until set precisely.
+        # FRONTEND_ORIGIN: https://<actual-frontend-domain>.zerops.app
 
   - setup: frontend
     build:
@@ -40,8 +57,11 @@ zerops:
         - port: 3000
           httpSupport: true
       start: cd apps/frontend && npm run start
-      env:
-        NEXT_PUBLIC_API_URL: https://api.zerops.app
+      # No NEXT_PUBLIC_API_URL here: apps/frontend/lib/api.js hardcodes the
+      # API base directly (a stale/wrong env var here repeatedly caused
+      # silent 404s on Vercel — see that file's comment). Deploy the api
+      # service first, note its real Zerops domain, hardcode it into
+      # lib/api.js, then deploy this service.
 
   - setup: db
     run:
