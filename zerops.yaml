@@ -64,12 +64,11 @@ zerops:
       buildCommands:
         - cd apps/frontend && npm install && npm run build
       # No trailing "/~" — see the api service's deployFiles comment above.
-      # node_modules listed explicitly, not assumed to come along with the
-      # parent path — the api service needed the same explicit listing
-      # (confirmed live: without it, "sh: next: not found" at runtime).
-      deployFiles:
-        - apps/frontend
-        - apps/frontend/node_modules
+      # Just the parent path — listing apps/frontend/node_modules as its
+      # own entry (nested under an already-listed parent) failed validation
+      # live ("Files/folders listed in build.deployFiles do not exist"),
+      # unlike the api service where node_modules was a sibling, not nested.
+      deployFiles: apps/frontend
       # No .next/cache here (confirmed live): caching it made Zerops
       # pre-create the .next/ directory before the build ran, and next
       # build then failed immediately with EACCES writing .next/trace —
@@ -83,11 +82,17 @@ zerops:
       ports:
         - port: 3000
           httpSupport: true
-      # No `cd` here — confirmed live that Zerops execs `start:` directly,
-      # not through a shell, so `cd` (a shell builtin, not a real binary)
-      # fails with "exec: cd: not found" (exit 127). `npm --prefix`
-      # achieves the same directory change without needing a shell.
-      start: npm --prefix apps/frontend run start
+      # No `cd`, and not `npm run start` either — confirmed live that Zerops
+      # execs `start:` directly without a shell ("cd: not found"), and
+      # `npm --prefix apps/frontend run start` got past that but then hit
+      # "sh: next: not found" (npm's own PATH handling for --prefix is a
+      # known trouble spot). Invoking next's actual entry script directly
+      # sidesteps both PATH and npm's script-runner entirely. The directory
+      # is passed positionally (`next start [directory]`) since Zerops execs
+      # this from the deploy root, not apps/frontend, and next start looks
+      # for .next/ relative to cwd (or that argument) by default — verified
+      # locally running from repo root exactly as Zerops would.
+      start: node apps/frontend/node_modules/next/dist/bin/next start apps/frontend -p 3000
       # No NEXT_PUBLIC_API_URL here: apps/frontend/lib/api.js hardcodes the
       # API base directly (a stale/wrong env var here repeatedly caused
       # silent 404s on Vercel — see that file's comment). Deploy the api
