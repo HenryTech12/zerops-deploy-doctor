@@ -1,13 +1,17 @@
 // Thin client over the Zerops platform REST API — status, logs, trigger redeploy.
 // Docs: https://docs.zerops.io/references/api
-const BASE = process.env.ZEROPS_API_BASE || "https://api.app-prg1.zerops.io/api/rest/public";
+//
+// Env vars intentionally avoid the ZEROPS_ prefix — Zerops's own dashboard
+// rejects user-defined env vars starting with ZEROPS_ (reserved for its own
+// auto-generated ones), confirmed live when adding these on the platform.
+const BASE = "https://api.app-prg1.zerops.io/api/rest/public";
 
 function headers() {
-  if (!process.env.ZEROPS_API_TOKEN) {
-    throw new Error("ZEROPS_API_TOKEN not configured");
+  if (!process.env.API_TOKEN) {
+    throw new Error("API_TOKEN not configured");
   }
   return {
-    Authorization: `Bearer ${process.env.ZEROPS_API_TOKEN}`,
+    Authorization: `Bearer ${process.env.API_TOKEN}`,
     "Content-Type": "application/json",
   };
 }
@@ -23,13 +27,13 @@ async function request(path, options = {}) {
 
 /** Current status of a service (running / deploying / failed / stopped). */
 async function getServiceStatus(serviceId) {
-  const id = serviceId || process.env.ZEROPS_SERVICE_ID;
+  const id = serviceId || process.env.PATIENT_SERVICE_ID;
   return request(`/service-stack/${id}`);
 }
 
 /** Latest deploy logs for a service — used to seed the diagnosis pipeline. */
 async function getDeployLogs(serviceId) {
-  const id = serviceId || process.env.ZEROPS_SERVICE_ID;
+  const id = serviceId || process.env.PATIENT_SERVICE_ID;
   const data = await request(`/service-stack/${id}/log?limit=500`);
   return (data?.items || []).map((l) => l.message).join("\n");
 }
@@ -44,8 +48,8 @@ async function getDeployLogs(serviceId) {
  * zerops.yaml) if the platform ignores an unknown field.
  */
 async function triggerRedeploy(serviceId, projectId, yamlOverride) {
-  const svc = serviceId || process.env.ZEROPS_SERVICE_ID;
-  const proj = projectId || process.env.ZEROPS_PROJECT_ID;
+  const svc = serviceId || process.env.PATIENT_SERVICE_ID;
+  const proj = projectId || process.env.PATIENT_PROJECT_ID;
   const body = { projectId: proj };
   if (yamlOverride) body.zeropsYamlContent = yamlOverride;
   return request(`/service-stack/${svc}/deploy`, {
@@ -67,5 +71,5 @@ module.exports = {
   getDeployLogs,
   triggerRedeploy,
   normalizeStatus,
-  isConfigured: () => Boolean(process.env.ZEROPS_API_TOKEN),
+  isConfigured: () => Boolean(process.env.API_TOKEN),
 };

@@ -19,11 +19,11 @@ router.post("/", async (req, res) => {
   try {
     if (!zerops.isConfigured()) {
       return res.status(503).json({
-        error: "ZEROPS_API_TOKEN not configured — cannot trigger a redeploy in this environment.",
+        error: "API_TOKEN not configured — cannot trigger a redeploy in this environment.",
       });
     }
 
-    await zerops.triggerRedeploy(process.env.ZEROPS_SERVICE_ID, process.env.ZEROPS_PROJECT_ID, fixed_yaml);
+    await zerops.triggerRedeploy(process.env.PATIENT_SERVICE_ID, process.env.PATIENT_PROJECT_ID, fixed_yaml);
 
     // Reuses the current attempt's number — apply-fix is a state transition
     // (diagnosed -> pending) within the same diagnose/fix/redeploy cycle, not

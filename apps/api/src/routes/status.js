@@ -23,11 +23,11 @@ router.get("/:replay_id", async (req, res) => {
   }
 
   if (!zerops.isConfigured()) {
-    return res.json({ replay_id, events, polled: false, note: "ZEROPS_API_TOKEN not configured" });
+    return res.json({ replay_id, events, polled: false, note: "API_TOKEN not configured" });
   }
 
   try {
-    const raw = await zerops.getServiceStatus(process.env.ZEROPS_SERVICE_ID);
+    const raw = await zerops.getServiceStatus(process.env.PATIENT_SERVICE_ID);
     const normalized = zerops.normalizeStatus(raw?.status);
 
     if (normalized === "pending") {
@@ -50,7 +50,7 @@ router.get("/:replay_id", async (req, res) => {
     }
 
     // normalized === "fail"
-    const newLog = await zerops.getDeployLogs(process.env.ZEROPS_SERVICE_ID).catch(() => "");
+    const newLog = await zerops.getDeployLogs(process.env.PATIENT_SERVICE_ID).catch(() => "");
     if (latest.pattern_id) {
       await rulesEngine.recordFailedFix(latest.pattern_id, latest.fix_summary);
     }

@@ -142,8 +142,10 @@ Copy `apps/api/.env.example` to `apps/api/.env` and fill in:
   `openai/gpt-oss-120b`, Call B on `openai/gpt-oss-20b`; without it, the API
   falls back to rules-engine-only answers, which is exactly what the browser
   smoke test above exercised)
-- `ZEROPS_API_TOKEN`, `ZEROPS_PROJECT_ID`, `ZEROPS_SERVICE_ID` — enables
+- `API_TOKEN`, `PATIENT_PROJECT_ID`, `PATIENT_SERVICE_ID` — enables
   apply-fix, status polling, and Watch Mode against a real Zerops service
+  (named without a `ZEROPS_` prefix — Zerops's own dashboard rejects
+  user-defined env vars starting with it)
 - `GITHUB_TOKEN` — optional, raises F7's GitHub API rate limit
 
 The frontend reads `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:3001`).

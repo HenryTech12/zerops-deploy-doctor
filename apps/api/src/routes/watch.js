@@ -14,10 +14,10 @@ const lastKnownStatus = new Map();
 
 router.get("/status", async (req, res) => {
   if (!zerops.isConfigured()) {
-    return res.json({ watching: false, note: "ZEROPS_API_TOKEN not configured" });
+    return res.json({ watching: false, note: "API_TOKEN not configured" });
   }
 
-  const serviceId = process.env.ZEROPS_SERVICE_ID;
+  const serviceId = process.env.PATIENT_SERVICE_ID;
   try {
     const raw = await zerops.getServiceStatus(serviceId);
     const normalized = zerops.normalizeStatus(raw?.status);
