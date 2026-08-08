@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getGithubAppInfo,
   getGithubConnection,
@@ -9,22 +9,31 @@ import {
   saveGithubConnection,
 } from "../lib/api";
 
-// F2's real "connect a repo" flow: install the GitHub App (GitHub's own
-// install page, same pattern Vercel/Netlify use), pick which of the
-// installation's repos + which yaml file apply-fix should commit to. No
-// static PATIENT_REPO env var needed once a connection is saved here.
+function GithubMark({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.09 3.29 9.4 7.86 10.93.57.1.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.87-1.36-3.87-1.36-.53-1.33-1.29-1.69-1.29-1.69-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.64 1.59.24 2.76.12 3.05.74.8 1.19 1.83 1.19 3.08 0 4.41-2.7 5.38-5.27 5.67.42.36.78 1.07.78 2.15 0 1.55-.01 2.8-.01 3.18 0 .31.21.66.8.55A10.51 10.51 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5Z" />
+    </svg>
+  );
+}
+
+// F2's real "connect a repo" flow, modeled on Vercel/Render's Git import
+// UI: connect the GitHub App, browse an actual repo list in a modal,
+// pick one, configure branch + config file, done.
 export default function ConnectRepo() {
   const [appInfo, setAppInfo] = useState(null);
-  const [repos, setRepos] = useState(null);
-  const [files, setFiles] = useState([]);
   const [connection, setConnection] = useState(null);
-  const [selectedRepo, setSelectedRepo] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [step, setStep] = useState("list"); // "list" | "configure"
+  const [repos, setRepos] = useState(null);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [files, setFiles] = useState([]);
   const [branch, setBranch] = useState("main");
   const [yamlPath, setYamlPath] = useState("zerops.yaml");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     getGithubAppInfo().then(setAppInfo).catch(() => setAppInfo(null));
@@ -33,38 +42,51 @@ export default function ConnectRepo() {
       .catch(() => setConnection(null));
   }, []);
 
+  function openModal() {
+    setStep("list");
+    setError(null);
+    setModalOpen(true);
+    loadRepos();
+  }
+
   async function loadRepos() {
     setLoading(true);
     setError(null);
     try {
       const r = await listGithubRepos();
       setRepos(r.repos);
-      if (r.repos[0]) selectRepo(r.repos[0]);
     } catch (err) {
       setError(err.message);
+      setRepos(null);
     } finally {
       setLoading(false);
     }
   }
 
-  function selectRepo(repo) {
-    setSelectedRepo(repo.full_name);
+  function pickRepo(repo) {
+    setSelected(repo);
     setBranch(repo.default_branch || "main");
+    setYamlPath("zerops.yaml");
     setFiles([]);
+    setStep("configure");
     listGithubRepoFiles(repo.owner, repo.repo, repo.default_branch || "main")
       .then((r) => setFiles(r.files))
       .catch(() => setFiles([]));
   }
 
-  async function onSave() {
-    if (!selectedRepo) return;
-    const [owner, repo] = selectedRepo.split("/");
+  async function onConnect() {
+    if (!selected) return;
     setSaving(true);
     setError(null);
     try {
-      const r = await saveGithubConnection({ owner, repo, branch, yaml_path: yamlPath });
+      const r = await saveGithubConnection({
+        owner: selected.owner,
+        repo: selected.repo,
+        branch,
+        yaml_path: yamlPath,
+      });
       setConnection(r.connection);
-      setOpen(false);
+      setModalOpen(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -72,115 +94,208 @@ export default function ConnectRepo() {
     }
   }
 
+  const filteredRepos = useMemo(() => {
+    if (!repos) return null;
+    const q = query.trim().toLowerCase();
+    if (!q) return repos;
+    return repos.filter((r) => r.full_name.toLowerCase().includes(q));
+  }, [repos, query]);
+
   return (
-    <div className="rounded-lg border border-white/10 bg-panel p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-text-primary">Connected repo</p>
-          <p className="text-xs text-text-muted">
-            {connection
-              ? `${connection.owner}/${connection.repo} @ ${connection.branch} — ${connection.yaml_path}`
-              : "None connected — apply-fix has nothing to commit to yet"}
-          </p>
-        </div>
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="text-xs text-aiblue hover:underline"
-        >
-          {open ? "Close" : connection ? "Change" : "Connect repo"}
-        </button>
+    <>
+      <div className="rounded-lg border border-white/10 bg-panel p-4 flex items-center justify-between">
+        {connection ? (
+          <>
+            <div className="flex items-center gap-3 min-w-0">
+              <GithubMark className="h-5 w-5 text-text-secondary shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm text-text-primary truncate">
+                  {connection.owner}/{connection.repo}
+                </p>
+                <p className="text-xs text-text-muted truncate">
+                  {connection.branch} — {connection.yaml_path}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={openModal}
+              className="shrink-0 rounded-md border border-white/10 px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:border-white/20 transition"
+            >
+              Change
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <GithubMark className="h-5 w-5 text-text-secondary" />
+              <div>
+                <p className="text-sm text-text-primary">No repository connected</p>
+                <p className="text-xs text-text-muted">Apply-fix needs a repo to commit fixes to</p>
+              </div>
+            </div>
+            <button
+              onClick={openModal}
+              className="shrink-0 rounded-md bg-teal text-bg text-xs font-medium px-3 py-2 hover:bg-teal/90 transition"
+            >
+              Import Git Repository
+            </button>
+          </>
+        )}
       </div>
 
-      {open && (
-        <div className="space-y-3 border-t border-white/10 pt-3">
-          {appInfo && (
-            <a
-              href={appInfo.install_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block rounded-md bg-teal text-bg text-xs font-medium px-3 py-2 hover:bg-teal/90 transition"
-            >
-              Install / manage {appInfo.name} on GitHub ↗
-            </a>
-          )}
-
-          <button
-            onClick={loadRepos}
-            disabled={loading}
-            className="block text-xs text-text-secondary underline disabled:opacity-50"
+      {modalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg border border-white/10 bg-panel shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
           >
-            {loading ? "Loading repos…" : "Refresh repo list"}
-          </button>
-
-          {repos && repos.length === 0 && (
-            <p className="text-xs text-amber">
-              No repos yet — install the App above and select at least one repo, then refresh.
-            </p>
-          )}
-
-          {repos && repos.length > 0 && (
-            <div className="space-y-2">
-              <label className="block text-xs text-text-muted">
-                Repository
-                <select
-                  value={selectedRepo}
-                  onChange={(e) => selectRepo(repos.find((r) => r.full_name === e.target.value))}
-                  className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
-                >
-                  {repos.map((r) => (
-                    <option key={r.full_name} value={r.full_name}>
-                      {r.full_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block text-xs text-text-muted">
-                Branch
-                <input
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
-                />
-              </label>
-
-              <label className="block text-xs text-text-muted">
-                Config file to fix (zerops.yaml)
-                {files.length > 0 ? (
-                  <select
-                    value={yamlPath}
-                    onChange={(e) => setYamlPath(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
-                  >
-                    {files.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={yamlPath}
-                    onChange={(e) => setYamlPath(e.target.value)}
-                    placeholder="zerops.yaml"
-                    className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
-                  />
-                )}
-              </label>
-
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <h3 className="font-display text-sm text-text-primary">
+                {step === "list" ? "Import Git Repository" : "Configure connection"}
+              </h3>
               <button
-                onClick={onSave}
-                disabled={saving}
-                className="w-full rounded-md bg-teal text-bg font-medium py-2 text-sm hover:bg-teal/90 transition disabled:opacity-50"
+                onClick={() => setModalOpen(false)}
+                className="text-text-muted hover:text-text-primary text-sm"
+                aria-label="Close"
               >
-                {saving ? "Saving…" : "Save connection"}
+                ✕
               </button>
             </div>
-          )}
 
-          {error && <p className="text-xs text-coral">{error}</p>}
+            {step === "list" && (
+              <div className="p-4 space-y-3">
+                {appInfo && (
+                  <a
+                    href={appInfo.install_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-2 w-full rounded-md border border-white/10 bg-bg px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:border-white/20 transition"
+                  >
+                    <GithubMark className="h-4 w-4" />
+                    Install / manage {appInfo.name} on GitHub ↗
+                  </a>
+                )}
+
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search repositories…"
+                  className="w-full rounded-md border border-white/10 bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted"
+                />
+
+                <div className="max-h-80 overflow-y-auto rounded-md border border-white/10 divide-y divide-white/10">
+                  {loading && (
+                    <p className="p-4 text-xs text-text-muted text-center">Loading repositories…</p>
+                  )}
+
+                  {!loading && filteredRepos && filteredRepos.length === 0 && (
+                    <p className="p-4 text-xs text-amber text-center">
+                      No repositories found — install the GitHub App above and select at least one
+                      repo, then try again.
+                    </p>
+                  )}
+
+                  {!loading &&
+                    filteredRepos &&
+                    filteredRepos.map((r) => (
+                      <button
+                        key={r.full_name}
+                        onClick={() => pickRepo(r)}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-white/5 transition"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <GithubMark className="h-4 w-4 text-text-muted shrink-0" />
+                          <span className="text-sm text-text-primary truncate">{r.full_name}</span>
+                          {r.private && (
+                            <span className="shrink-0 rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-text-muted">
+                              Private
+                            </span>
+                          )}
+                        </div>
+                        <span className="shrink-0 rounded-md bg-teal/10 text-teal text-xs px-2 py-1">
+                          Import
+                        </span>
+                      </button>
+                    ))}
+                </div>
+
+                <button
+                  onClick={loadRepos}
+                  disabled={loading}
+                  className="text-xs text-aiblue hover:underline disabled:opacity-50"
+                >
+                  Refresh list
+                </button>
+
+                {error && <p className="text-xs text-coral">{error}</p>}
+              </div>
+            )}
+
+            {step === "configure" && selected && (
+              <div className="p-4 space-y-3">
+                <div className="flex items-center gap-2 rounded-md border border-white/10 bg-bg px-3 py-2">
+                  <GithubMark className="h-4 w-4 text-text-secondary" />
+                  <span className="text-sm text-text-primary">{selected.full_name}</span>
+                </div>
+
+                <label className="block text-xs text-text-muted">
+                  Branch
+                  <input
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
+                  />
+                </label>
+
+                <label className="block text-xs text-text-muted">
+                  Config file to fix
+                  {files.length > 0 ? (
+                    <select
+                      value={yamlPath}
+                      onChange={(e) => setYamlPath(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
+                    >
+                      {files.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={yamlPath}
+                      onChange={(e) => setYamlPath(e.target.value)}
+                      placeholder="zerops.yaml"
+                      className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
+                    />
+                  )}
+                </label>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => setStep("list")}
+                    className="rounded-md border border-white/10 px-3 py-2 text-xs text-text-secondary hover:text-text-primary transition"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={onConnect}
+                    disabled={saving}
+                    className="flex-1 rounded-md bg-teal text-bg font-medium py-2 text-sm hover:bg-teal/90 transition disabled:opacity-50"
+                  >
+                    {saving ? "Connecting…" : "Connect"}
+                  </button>
+                </div>
+
+                {error && <p className="text-xs text-coral">{error}</p>}
+              </div>
+            )}
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
