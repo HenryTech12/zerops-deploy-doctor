@@ -63,6 +63,20 @@ export default function ConnectRepo() {
     }
   }
 
+  // Installing the App happens on GitHub's own tab — auto-retry the repo
+  // list when the user comes back to this tab instead of making them find
+  // and click "Refresh list" themselves (same effect Vercel/Render's import
+  // flow gets from a popup + postMessage; a focus listener is simpler and
+  // works just as well since the install page opens in a normal new tab).
+  useEffect(() => {
+    if (!modalOpen || step !== "list") return;
+    function onFocus() {
+      loadRepos();
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [modalOpen, step]);
+
   function pickRepo(repo) {
     setSelected(repo);
     setBranch(repo.default_branch || "main");
@@ -100,6 +114,8 @@ export default function ConnectRepo() {
     if (!q) return repos;
     return repos.filter((r) => r.full_name.toLowerCase().includes(q));
   }, [repos, query]);
+
+  const noInstallation = Boolean(error && error.toLowerCase().includes("no installations"));
 
   return (
     <>
@@ -165,7 +181,40 @@ export default function ConnectRepo() {
               </button>
             </div>
 
-            {step === "list" && (
+            {step === "list" && noInstallation && (
+              <div className="p-6 space-y-4 text-center">
+                <GithubMark className="h-8 w-8 mx-auto text-text-secondary" />
+                <div>
+                  <p className="text-sm text-text-primary">
+                    Step 1: install {appInfo?.name || "the GitHub App"} on a repo
+                  </p>
+                  <p className="text-xs text-text-muted mt-1">
+                    Nothing to import yet. Click below, choose the repo(s) you want DeployDoctor to
+                    fix, then come back to this tab — the list refreshes automatically.
+                  </p>
+                </div>
+                {appInfo && (
+                  <a
+                    href={appInfo.install_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-md bg-teal text-bg text-sm font-medium px-4 py-2 hover:bg-teal/90 transition"
+                  >
+                    <GithubMark className="h-4 w-4" />
+                    Install on GitHub ↗
+                  </a>
+                )}
+                <button
+                  onClick={loadRepos}
+                  disabled={loading}
+                  className="block mx-auto text-xs text-aiblue hover:underline disabled:opacity-50"
+                >
+                  {loading ? "Checking…" : "Already installed it — refresh"}
+                </button>
+              </div>
+            )}
+
+            {step === "list" && !noInstallation && (
               <div className="p-4 space-y-3">
                 {appInfo && (
                   <a
@@ -193,8 +242,8 @@ export default function ConnectRepo() {
 
                   {!loading && filteredRepos && filteredRepos.length === 0 && (
                     <p className="p-4 text-xs text-amber text-center">
-                      No repositories found — install the GitHub App above and select at least one
-                      repo, then try again.
+                      No repositories match — install the App on more repos above, or adjust your
+                      search.
                     </p>
                   )}
 
