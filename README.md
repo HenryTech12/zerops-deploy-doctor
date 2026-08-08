@@ -24,7 +24,11 @@ click.
 
 1. Connect a project / paste a `zerops.yaml` + failing log / type a
    plain-English problem — or flip on **Watch Mode** and let DeployDoctor
-   catch failures by itself.
+   catch failures by itself. No log to paste? If a repo is connected,
+   DeployDoctor pulls the patient service's actual recent runtime log
+   automatically (same source Watch Mode reads) instead of dead-ending on
+   "no error details provided" — confirmed live that a plain-English
+   "go through my codebase" submission needed exactly this.
 2. A rules engine + an LLM (Groq, gpt-oss) diagnose the root cause.
 3. **Config errors:** the LLM proposes a corrected `zerops.yaml` as a diff →
    click Apply → the fix is committed straight to the patient repo →
@@ -91,7 +95,7 @@ zerops.yaml      main project: frontend + api + db
 
 | | Feature | Status |
 |---|---|---|
-| F1 | AI diagnosis (rules engine + Groq gpt-oss) | ✅ core |
+| F1 | AI diagnosis (rules engine + Groq gpt-oss), falls back to real Zerops runtime logs when no log is given | ✅ core |
 | F2 | Auto-fix with diff approval, retry memory, max-3-loop guard | ✅ core |
 | F3 | Natural-language input | ✅ folded into `/api/diagnose` |
 | F4 | Learning Mode (`next_time_tip`, difficulty) | ✅ core |
@@ -164,9 +168,9 @@ Copy `apps/api/.env.example` to `apps/api/.env` and fill in:
   falls back to rules-engine-only answers, which is exactly what the browser
   smoke test above exercised)
 - `API_TOKEN`, `PATIENT_PROJECT_ID`, `PATIENT_SERVICE_ID` — enables status
-  polling and Watch Mode against a real Zerops service (named without a
-  `ZEROPS_` prefix — Zerops's own dashboard rejects user-defined env vars
-  starting with it)
+  polling, Watch Mode, and F1's runtime-log fallback (below) against a real
+  Zerops service (named without a `ZEROPS_` prefix — Zerops's own dashboard
+  rejects user-defined env vars starting with it)
 - `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` — enables F2's apply-fix (commits
   the corrected `zerops.yaml` to whichever repo is connected via the
   dashboard's "Connect repo" UI, using a GitHub App installation token; see

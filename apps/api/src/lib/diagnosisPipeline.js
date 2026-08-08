@@ -6,6 +6,7 @@ const llm = require("./llm");
 const github = require("./github");
 const replays = require("./replays");
 const repoConnection = require("./repoConnection");
+const zerops = require("./zerops");
 
 const ANALYZE_CODEBASE_PROMPT =
   "No specific error was reported. Review the source files below for the most likely bug, " +
@@ -122,15 +123,36 @@ async function runDiagnosis({
     }
   }
 
-  // "Analyze codebase" has no pasted error to go on — give the LLM an
-  // explicit instruction instead of an empty errorLog so it knows to scan
-  // rather than explain a specific failure that doesn't exist.
-  const effectiveLog = log || (useConnectedRepo && !text ? ANALYZE_CODEBASE_PROMPT : "");
+  // No pasted log to go on — rather than dead-ending on "no error details
+  // provided" (confirmed live: that's exactly what a plain-English or
+  // yaml-only submission produced), pull the patient service's actual
+  // recent runtime log, the same source Watch Mode's background job
+  // already reads. The platform doesn't expose an explicit time-range
+  // filter, so "recent" (Zerops's own log window) is the proxy for
+  // "around when this is being diagnosed" — good enough since the user is
+  // diagnosing right now, not investigating a historical incident.
+  let effectiveLog = log;
+  if (!effectiveLog && zerops.isConfigured() && process.env.PATIENT_SERVICE_ID) {
+    try {
+      const runtimeLog = await zerops.getDeployLogs(process.env.PATIENT_SERVICE_ID);
+      if (runtimeLog && runtimeLog.trim()) effectiveLog = runtimeLog;
+    } catch {
+      // Zerops fetch failed (token/service not configured, transient
+      // error) — fall through to the next fallback instead of failing
+      // the whole diagnosis over a missing nice-to-have.
+    }
+  }
+  // Still nothing (Zerops not configured, or its log came back empty) —
+  // "Analyze codebase" at least gives the LLM an explicit instruction
+  // instead of silently diagnosing off nothing.
+  if (!effectiveLog && useConnectedRepo && !text) {
+    effectiveLog = ANALYZE_CODEBASE_PROMPT;
+  }
 
-  const { pattern, hint } = await rulesEngine.matchFailurePattern(effectiveYaml, log);
+  const { pattern, hint } = await rulesEngine.matchFailurePattern(effectiveYaml, effectiveLog);
   if (pattern) await rulesEngine.recordSeen(pattern.id);
   const failedFixes = pattern ? await rulesEngine.getFailedFixes(pattern.id) : [];
-  const attemptHistory = await buildAttemptHistory(existingReplayId, log);
+  const attemptHistory = await buildAttemptHistory(existingReplayId, effectiveLog);
 
   let diagnosis;
   if (llm.isConfigured()) {
