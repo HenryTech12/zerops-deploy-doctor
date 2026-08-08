@@ -19,6 +19,16 @@ function callbackUrl() {
   return `${process.env.API_PUBLIC_URL}/api/auth/github/callback`;
 }
 
+// `process.env.FRONTEND_ORIGIN || "/"` looked like a safe fallback but
+// isn't: "/" + "/dashboard" is "//dashboard", which browsers parse as a
+// protocol-relative URL — i.e. "go to a host literally named dashboard"
+// (confirmed live: DNS_PROBE_FINISHED_NXDOMAIN). Only ever redirect to a
+// real absolute origin; anything else is treated as "not configured."
+function frontendOrigin() {
+  const origin = process.env.FRONTEND_ORIGIN;
+  return origin && /^https?:\/\//.test(origin) ? origin.replace(/\/$/, "") : null;
+}
+
 function parseCookie(req, name) {
   const header = req.headers.cookie || "";
   const match = header.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -26,7 +36,12 @@ function parseCookie(req, name) {
 }
 
 router.get("/github/login", (req, res) => {
-  const frontend = process.env.FRONTEND_ORIGIN || "/";
+  const frontend = frontendOrigin();
+  if (!frontend) {
+    return res
+      .status(500)
+      .send("FRONTEND_ORIGIN is not set (or isn't a full https:// URL) on the api service — cannot complete GitHub sign-in. Set it and retry, or use the dashboard's \"Skip\" link.");
+  }
   if (!githubOAuth.isConfigured() || !process.env.API_PUBLIC_URL) {
     // Graceful fallback — the whole app works without sign-in, this is a
     // pure enhancement, so an unconfigured OAuth setup should never block
@@ -43,7 +58,13 @@ router.get("/github/login", (req, res) => {
 });
 
 router.get("/github/callback", async (req, res) => {
-  const frontend = process.env.FRONTEND_ORIGIN || "/";
+  const frontend = frontendOrigin();
+  if (!frontend) {
+    return res
+      .status(500)
+      .send("FRONTEND_ORIGIN is not set (or isn't a full https:// URL) on the api service — cannot complete GitHub sign-in.");
+  }
+
   const { code, state } = req.query;
   const expectedState = parseCookie(req, "dd_oauth_state");
 

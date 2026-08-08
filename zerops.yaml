@@ -74,14 +74,14 @@ zerops:
         PATIENT_REPO: HenryTech12/deploydoctor-patient-app
         PATIENT_REPO_BRANCH: main
         # This service's own public URL — must exactly match the GitHub
-        # App's Callback URL for OAuth login to work. Not knowable until
-        # first deploy; set in Zerops UI once you have the real domain.
-        # API_PUBLIC_URL: https://<actual-api-domain>.zerops.app
-        # Left unset deliberately — the frontend's exact Zerops domain isn't
-        # known until first deploy, and CORS is an exact-string match (a
-        # trailing slash or wrong path silently breaks every request, as we
-        # found on Render). Defaults to permissive (*) until set precisely.
-        # FRONTEND_ORIGIN: https://<actual-frontend-domain>.zerops.app
+        # App's Callback URL for OAuth login to work.
+        API_PUBLIC_URL: https://api-2ab2-3001.prg1.zerops.app
+        # Exact-string match for CORS (no trailing slash — a trailing slash
+        # or wrong path silently breaks every request, as found on Render)
+        # AND required for the GitHub sign-in redirect (see auth.js) — an
+        # unset/malformed value here produced a broken "//dashboard"
+        # protocol-relative redirect live (DNS_PROBE_FINISHED_NXDOMAIN).
+        FRONTEND_ORIGIN: https://frontend-2ab2-3000.prg1.zerops.app
 
   - setup: frontend
     build:
