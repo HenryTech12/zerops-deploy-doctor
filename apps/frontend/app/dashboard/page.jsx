@@ -11,6 +11,7 @@ import WatchToggle from "../../components/WatchToggle";
 import RepoSessions from "../../components/RepoSessions";
 import RecentDiagnoses from "../../components/RecentDiagnoses";
 import UserBadge from "../../components/UserBadge";
+import NotificationBell from "../../components/NotificationBell";
 import {
   diagnose,
   applyFix,
@@ -18,6 +19,8 @@ import {
   getPatternStats,
   getReplay,
   getGithubConnectionContent,
+  listWatchNotifications,
+  markAllNotificationsSeen,
 } from "../../lib/api";
 
 const STATUS_POLL_MS = 4000;
@@ -37,7 +40,26 @@ export default function Dashboard() {
   const [loadingConnectedYaml, setLoadingConnectedYaml] = useState(false);
   const [username, setUsername] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const pollRef = useRef(null);
+
+  const refreshNotifications = useCallback(() => {
+    listWatchNotifications()
+      .then((r) => setNotifications(r.notifications))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshNotifications();
+  }, [refreshNotifications]);
+
+  function onNotificationBellOpen() {
+    if (notifications.some((n) => !n.seen)) {
+      markAllNotificationsSeen()
+        .then(refreshNotifications)
+        .catch(() => {});
+    }
+  }
 
   const stopPolling = useCallback(() => {
     clearInterval(pollRef.current);
@@ -189,8 +211,11 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <UserBadge username={username} avatarUrl={avatarUrl} onSignOut={signOut} />
-          <WatchToggle onCaught={onWatchCaught} />
+          <div className="flex items-center gap-3">
+            <UserBadge username={username} avatarUrl={avatarUrl} onSignOut={signOut} />
+            <NotificationBell notifications={notifications} onOpen={onNotificationBellOpen} />
+          </div>
+          <WatchToggle onCaught={onWatchCaught} onNotification={refreshNotifications} />
         </div>
       </header>
 

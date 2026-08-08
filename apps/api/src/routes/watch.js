@@ -1,42 +1,59 @@
-// GET /api/watch/status — F8. Polled by the frontend's Watch toggle every ~30s
-// while the page is open. Edge-triggered: only fires a fresh diagnosis the
-// moment the service transitions INTO a failed state, not on every poll while
-// it stays failed. Page-open polling only — no background jobs/webhooks (v2).
+// F8 Watch Mode — persisted toggle, runtime-log error detection (not just
+// deploy-status flips, which miss an app that's "running" per Zerops but
+// throwing errors on real requests), and in-app notifications. Polling
+// itself is still driven by the frontend while the page is open (see
+// watchMode.js for the "why no background worker" note).
 const express = require("express");
 const zerops = require("../lib/zerops");
-const { runDiagnosis } = require("../lib/diagnosisPipeline");
+const watchMode = require("../lib/watchMode");
 
 const router = express.Router();
 
-// In-memory, single-instance state is enough for a page-open watch loop —
-// intentionally not persisted (see doc §F8 scope guard).
-const lastKnownStatus = new Map();
+router.get("/state", async (req, res) => {
+  const state = await watchMode.getState();
+  res.json({ enabled: state.enabled });
+});
+
+router.post("/enable", async (req, res) => {
+  await watchMode.setEnabled(true);
+  res.json({ enabled: true });
+});
+
+router.post("/disable", async (req, res) => {
+  await watchMode.setEnabled(false);
+  res.json({ enabled: false });
+});
+
+router.get("/notifications", async (req, res) => {
+  const notifications = await watchMode.listNotifications({ onlyUnseen: req.query.unseen === "true" });
+  res.json({ notifications });
+});
+
+router.post("/notifications/:id/seen", async (req, res) => {
+  await watchMode.markSeen(req.params.id);
+  res.json({ ok: true });
+});
+
+router.post("/notifications/seen-all", async (req, res) => {
+  await watchMode.markAllSeen();
+  res.json({ ok: true });
+});
 
 router.get("/status", async (req, res) => {
+  const state = await watchMode.getState();
+  if (!state.enabled) {
+    return res.json({ watching: false });
+  }
   if (!zerops.isConfigured()) {
     return res.json({ watching: false, note: "API_TOKEN not configured" });
   }
 
-  const serviceId = process.env.PATIENT_SERVICE_ID;
   try {
-    const raw = await zerops.getServiceStatus(serviceId);
-    const normalized = zerops.normalizeStatus(raw?.status);
-    const previous = lastKnownStatus.get(serviceId) || "unknown";
-    lastKnownStatus.set(serviceId, normalized);
-
-    const justFailed = normalized === "fail" && previous !== "fail";
-    if (!justFailed) {
-      return res.json({ watching: true, status: normalized, triggered: false });
+    const diagnosis = await watchMode.checkForNewError(process.env.PATIENT_SERVICE_ID);
+    if (diagnosis) {
+      return res.json({ watching: true, triggered: true, diagnosis });
     }
-
-    const log = await zerops.getDeployLogs(serviceId).catch(() => "");
-    const diagnosis = await runDiagnosis({
-      yaml: null,
-      log,
-      titleHint: "Caught automatically by Watch Mode",
-    });
-
-    res.json({ watching: true, status: normalized, triggered: true, diagnosis });
+    res.json({ watching: true, triggered: false });
   } catch (err) {
     console.error("watch status error:", err);
     res.status(500).json({ error: "Watch status check failed", detail: err.message });

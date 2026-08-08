@@ -69,6 +69,30 @@ export function getWatchStatus() {
   return request("/api/watch/status");
 }
 
+export function getWatchState() {
+  return request("/api/watch/state");
+}
+
+export function enableWatch() {
+  return request("/api/watch/enable", { method: "POST" });
+}
+
+export function disableWatch() {
+  return request("/api/watch/disable", { method: "POST" });
+}
+
+export function listWatchNotifications(onlyUnseen = false) {
+  return request(`/api/watch/notifications${onlyUnseen ? "?unseen=true" : ""}`);
+}
+
+export function markNotificationSeen(id) {
+  return request(`/api/watch/notifications/${id}/seen`, { method: "POST" });
+}
+
+export function markAllNotificationsSeen() {
+  return request("/api/watch/notifications/seen-all", { method: "POST" });
+}
+
 export function getGithubAppInfo() {
   return request("/api/github/app-info");
 }

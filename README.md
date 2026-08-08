@@ -98,17 +98,18 @@ zerops.yaml      main project: frontend + api + db
 | F5 | Community Fix Intelligence — real counts only | ✅ |
 | F6 | Deploy Replay Timeline — public `/replay/:id` | ✅ signature feature |
 | F7 | Runtime & code error diagnosis (copy-paste, or "Analyze codebase" on a connected repo — never auto-applied) | ✅ |
-| F8 | Watch Mode — page-open polling, edge-triggered auto-diagnosis | ✅ |
+| F8 | Watch Mode — persisted toggle, runtime-log error detection, in-app notifications | ✅ |
 | F9 | Learning from failed fixes (`failed_fixes` table) | ✅ |
 
 ## Data model
 
 See [`db/schema.sql`](db/schema.sql): `failure_patterns`, `failed_fixes`,
-`replays`, `replay_events`, `repo_sessions`. Seed data for rules-engine
-categories 1–3 lives in [`db/seed.sql`](db/seed.sql). Category 4
-(runtime/code) is LLM-led by design — its `failure_patterns` rows are
-created the first time the API diagnoses a new code error, so it
-participates in F5/F9 like any other pattern.
+`replays`, `replay_events`, `repo_sessions`, `watch_state`,
+`watch_notifications`. Seed data for rules-engine categories 1–3 lives in
+[`db/seed.sql`](db/seed.sql). Category 4 (runtime/code) is LLM-led by
+design — its `failure_patterns` rows are created the first time the API
+diagnoses a new code error, so it participates in F5/F9 like any other
+pattern.
 
 ## API surface
 
@@ -122,7 +123,11 @@ participates in F5/F9 like any other pattern.
 | GET | `/api/auth/github/login` | starts "Continue with GitHub"; falls straight through to `/dashboard` if OAuth isn't configured |
 | GET | `/api/auth/github/callback` | OAuth callback — redirects back to `/dashboard?gh_user=...` |
 | GET | `/api/patterns/:id/stats` | F5 stat-tile data |
-| GET | `/api/watch/status` | F8 — polled every ~30s while Watch Mode is on |
+| GET | `/api/watch/state` | the persisted on/off toggle — restores correctly after a refresh |
+| POST | `/api/watch/enable` / `/api/watch/disable` | flip the persisted toggle |
+| GET | `/api/watch/status` | F8 — polled every ~30s while Watch Mode is on; runs the runtime-log error check |
+| GET | `/api/watch/notifications` | in-app notification list (`?unseen=true` for just the unread ones) |
+| POST | `/api/watch/notifications/:id/seen` / `/seen-all` | mark notification(s) as read |
 | GET | `/api/github/app-info` | GitHub App slug + install URL, for the "New session" button |
 | GET | `/api/github/repos` | repos the App's installation currently has access to |
 | GET | `/api/github/repos/:owner/:repo/files` | yaml/yml files in that repo, for the file picker |
@@ -252,6 +257,33 @@ If any of those three aren't set, `/api/auth/github/login` just redirects
 straight to `/dashboard` — signing in degrades gracefully instead of
 breaking anything.
 
+## Watch Mode (F8)
+
+Flip the toggle on and DeployDoctor polls the patient service's runtime
+log every ~30s (while the tab is open — see the roadmap for the "real
+background worker" gap) instead of only reacting to a deploy-status flip.
+That distinction matters: an app can be `RUNNING` from Zerops's point of
+view while a specific request path throws on every hit (the missing
+`GREETING_NAME` bug is exactly this — the container never crashes, only
+`/greet` does), and a status-only check would never notice.
+
+Each poll hashes the log's tail; a changed hash that also looks like an
+error (`apps/api/src/lib/watchMode.js`'s `ERROR_RE` — stack traces,
+"Exception"/"TypeError", 5xx-looking lines, etc.) triggers a full
+diagnosis, grounded in the active session's source when one exists so the
+LLM can point at a real file/line instead of just describing the log text.
+An unchanged tail never re-triggers, so one persistent error doesn't spam
+a fresh diagnosis every 30 seconds.
+
+The result lands as a real, dismissible **in-app notification** (the bell
+icon, top right) — not just the immediate on-page update you get if you
+happen to be looking at the tab when it fires. Both the on/off toggle and
+the notification list are stored in Postgres (`watch_state`,
+`watch_notifications`), so they survive a refresh; clicking a notification
+opens its replay for review, and applying the fix is the same manual,
+diff-reviewed F2 flow as anywhere else — Watch Mode only decides *when to
+diagnose*, never *whether to apply*.
+
 ## The patient app
 
 [`apps/patient-app`](apps/patient-app) is deployed as its **own** Zerops
@@ -292,8 +324,11 @@ display, Inter for body text, JetBrains Mono for yaml/logs/diffs.
 
 ## Roadmap (v2, out of scope for this build)
 
-- **Watch Mode v2:** webhooks and background monitoring instead of
-  page-open polling, plus push/email notifications on a caught failure.
+- **Watch Mode v2:** webhooks and a real background worker instead of
+  page-open polling (the browser still has to have the tab open to check —
+  the toggle and any caught issues persist across a refresh, but nothing
+  checks while every tab is closed), plus push/email notifications instead
+  of in-app-only.
 - **Browser extension** overlaying DeployDoctor diagnoses directly on the
   Zerops dashboard.
 - **Level 3 learning:** fine-tuning or a learned fix-ranking model on top of

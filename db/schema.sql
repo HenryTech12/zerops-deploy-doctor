@@ -84,3 +84,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_sessions_one_active
   ON repo_sessions ((is_active)) WHERE is_active;
 
 CREATE INDEX IF NOT EXISTS idx_repo_sessions_username ON repo_sessions(username);
+
+-- Watch Mode's on/off toggle, persisted so it survives a page refresh
+-- instead of living only in React state — still page-open polling done by
+-- the browser (no server-side background worker), this just means the
+-- toggle correctly shows "still on" when you come back instead of forcing
+-- a re-flip. last_signature is a hash of the last few log lines checked,
+-- used to detect genuinely NEW log content rather than re-triggering on
+-- the same already-seen error every 30s.
+CREATE TABLE IF NOT EXISTS watch_state (
+  id             INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  enabled        BOOLEAN NOT NULL DEFAULT false,
+  last_signature TEXT,
+  updated_at     TIMESTAMPTZ DEFAULT now()
+);
+
+-- An in-app, dismissible record of what Watch Mode caught — separate from
+-- replay_events (the diagnosis timeline) so "have I looked at this yet"
+-- has its own lifecycle instead of overloading replay status.
+CREATE TABLE IF NOT EXISTS watch_notifications (
+  id         SERIAL PRIMARY KEY,
+  replay_id  TEXT REFERENCES replays(id),
+  cause      TEXT,
+  error_type TEXT,
+  seen       BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_watch_notifications_seen ON watch_notifications(seen);
