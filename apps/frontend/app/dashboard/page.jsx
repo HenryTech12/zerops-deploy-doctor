@@ -190,9 +190,11 @@ export default function Dashboard() {
           if (status.events) setEvents(status.events);
           if (status.resolved === "success") {
             setApplyState("success");
+            setApplying(false);
             stopPolling();
           } else if (status.resolved === "fail" && status.stopped) {
             setApplyState("stopped");
+            setApplying(false);
             stopPolling();
           } else if (status.resolved === "fail") {
             // Retry memory (F2, Level 1): feed the new log back into F1 automatically.
