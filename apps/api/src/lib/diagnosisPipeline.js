@@ -74,6 +74,7 @@ async function runDiagnosis({
 
   let sourceFiles = "";
   let connection = null;
+  let effectiveYaml = yaml;
   if (useConnectedRepo) {
     connection = await repoConnection.getConnection();
     if (!connection) {
@@ -90,6 +91,28 @@ async function runDiagnosis({
     } catch (err) {
       sourceFiles = `(could not fetch source: ${err.message})`;
     }
+
+    // "Analyze codebase" never asks the user to paste zerops.yaml, but a
+    // config-type diagnosis still needs the REAL one to edit — without
+    // this, the LLM has nothing to anchor "fixed_yaml" on and will
+    // invent a plausible-looking but wrong schema from scratch (confirmed
+    // live: it fabricated a `services: web: ...` shape instead of
+    // Zerops's actual `zerops: - setup: ...`, and that got committed
+    // verbatim, breaking the repo's real deploy pipeline).
+    if (!effectiveYaml) {
+      try {
+        effectiveYaml = await github.getFileContent(
+          connection.owner,
+          connection.repo,
+          connection.yaml_path,
+          connection.branch
+        );
+      } catch {
+        // no yaml at that path, or fetch failed — leave undefined; the
+        // system prompt is instructed to never fabricate a config fix
+        // when yamlContent is "(none provided)".
+      }
+    }
   } else if (repoUrl) {
     try {
       sourceFiles = await github.fetchRelevantSources(repoUrl);
@@ -103,7 +126,7 @@ async function runDiagnosis({
   // rather than explain a specific failure that doesn't exist.
   const effectiveLog = log || (useConnectedRepo && !text ? ANALYZE_CODEBASE_PROMPT : "");
 
-  const { pattern, hint } = await rulesEngine.matchFailurePattern(yaml, log);
+  const { pattern, hint } = await rulesEngine.matchFailurePattern(effectiveYaml, log);
   if (pattern) await rulesEngine.recordSeen(pattern.id);
   const failedFixes = pattern ? await rulesEngine.getFailedFixes(pattern.id) : [];
   const attemptHistory = await buildAttemptHistory(existingReplayId, log);
@@ -112,7 +135,7 @@ async function runDiagnosis({
   if (llm.isConfigured()) {
     try {
       diagnosis = await llm.diagnose({
-        yamlContent: yaml,
+        yamlContent: effectiveYaml,
         errorLog: effectiveLog || (routerResult ? `(user description) ${text}` : ""),
         sourceFiles,
         matchedPattern: pattern,

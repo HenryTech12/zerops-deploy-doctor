@@ -4,16 +4,46 @@
 // call, which the frontend only sends on an explicit user click on the diff
 // viewer (F2 human-in-the-loop).
 const express = require("express");
+const YAML = require("yaml");
 const github = require("../lib/github");
 const replays = require("../lib/replays");
 const repoConnection = require("../lib/repoConnection");
 
 const router = express.Router();
 
+// Confirmed live: an LLM-generated fixed_yaml with no real zerops.yaml to
+// anchor on fabricated a plausible-but-wrong schema (`services: web: ...`
+// instead of Zerops's real `zerops: - setup: ...`), got committed verbatim,
+// and broke the patient repo's actual deploy pipeline ("setup not found").
+// This is the last line of defense against ever committing that again,
+// regardless of what upstream grounding fixes are or aren't in place.
+function invalidZeropsYamlReason(text) {
+  let parsed;
+  try {
+    parsed = YAML.parse(text);
+  } catch (err) {
+    return `not valid YAML (${err.message})`;
+  }
+  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.zerops)) {
+    return 'missing a top-level "zerops:" list — not a real Zerops config';
+  }
+  if (!parsed.zerops.every((s) => s && typeof s.setup === "string")) {
+    return 'every entry under "zerops:" needs a "setup:" name';
+  }
+  return null;
+}
+
 router.post("/", async (req, res) => {
   const { replay_id, fixed_yaml, pattern_id } = req.body || {};
   if (!replay_id || !fixed_yaml) {
     return res.status(400).json({ error: "replay_id and fixed_yaml are required." });
+  }
+
+  const invalidReason = invalidZeropsYamlReason(fixed_yaml);
+  if (invalidReason) {
+    return res.status(422).json({
+      error: `Refusing to commit — the generated fix ${invalidReason}. Re-run diagnose with the real zerops.yaml included, or edit the fix manually before applying.`,
+    });
   }
 
   const replay = await replays.getReplay(replay_id);
