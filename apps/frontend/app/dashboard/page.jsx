@@ -21,9 +21,11 @@ import {
   getGithubConnectionContent,
   listWatchNotifications,
   markAllNotificationsSeen,
+  getWatchNotification,
 } from "../../lib/api";
 
 const STATUS_POLL_MS = 4000;
+const NOTIFICATIONS_POLL_MS = 30000;
 const USERNAME_KEY = "dd_username";
 const AVATAR_KEY = "dd_avatar";
 
@@ -49,8 +51,15 @@ export default function Dashboard() {
       .catch(() => {});
   }, []);
 
+  // Watch Mode's actual checking now happens server-side (see
+  // watchScheduler.js) regardless of whether this tab is open — polling
+  // notifications is how an open tab finds out something was caught,
+  // instead of the old model where the tab itself had to be the one doing
+  // the check.
   useEffect(() => {
     refreshNotifications();
+    const interval = setInterval(refreshNotifications, NOTIFICATIONS_POLL_MS);
+    return () => clearInterval(interval);
   }, [refreshNotifications]);
 
   function onNotificationBellOpen() {
@@ -58,6 +67,22 @@ export default function Dashboard() {
       markAllNotificationsSeen()
         .then(refreshNotifications)
         .catch(() => {});
+    }
+  }
+
+  // Loads a notification's full stored diagnosis into the live panel —
+  // the same review-then-decide flow as any other diagnosis, not just a
+  // read-only summary.
+  async function onSelectNotification(id) {
+    try {
+      const { notification } = await getWatchNotification(id);
+      if (notification.diagnosis) {
+        setDiagnosis(notification.diagnosis);
+        setOriginalYaml("");
+        await refreshEvents(notification.replay_id);
+      }
+    } catch (err) {
+      setError(err.message);
     }
   }
 
@@ -148,12 +173,6 @@ export default function Dashboard() {
     }
   }
 
-  async function onWatchCaught(result) {
-    setDiagnosis(result);
-    setOriginalYaml("");
-    await refreshEvents(result.replay_id);
-  }
-
   async function onApply() {
     if (!diagnosis?.fixed_yaml || !diagnosis?.replay_id) return;
     setApplying(true);
@@ -213,9 +232,13 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="flex items-center gap-3">
             <UserBadge username={username} avatarUrl={avatarUrl} onSignOut={signOut} />
-            <NotificationBell notifications={notifications} onOpen={onNotificationBellOpen} />
+            <NotificationBell
+              notifications={notifications}
+              onOpen={onNotificationBellOpen}
+              onSelect={onSelectNotification}
+            />
           </div>
-          <WatchToggle onCaught={onWatchCaught} onNotification={refreshNotifications} />
+          <WatchToggle />
         </div>
       </header>
 

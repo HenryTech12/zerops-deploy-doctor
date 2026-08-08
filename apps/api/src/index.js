@@ -12,6 +12,7 @@ const patternsRoute = require("./routes/patterns");
 const watchRoute = require("./routes/watch");
 const githubRoute = require("./routes/github");
 const authRoute = require("./routes/auth");
+const watchScheduler = require("./lib/watchScheduler");
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "*" }));
@@ -29,7 +30,7 @@ app.use("/api/apply-fix", applyFixRoute);
 app.use("/api/status", statusRoute);
 app.use("/api/replay", replayRoute); // public, no auth — F6
 app.use("/api/patterns", patternsRoute);
-app.use("/api/watch", watchRoute); // F8 — page-open polling only
+app.use("/api/watch", watchRoute); // F8 — see watchScheduler.js for the actual background job
 app.use("/api/github", githubRoute); // Connect repo — GitHub App install + repo/file picker
 app.use("/api/auth", authRoute); // landing page "Continue with GitHub" — see auth.js
 
@@ -52,6 +53,8 @@ async function start() {
   app.listen(port, () => {
     console.log(`DeployDoctor API listening on :${port}`);
   });
+
+  watchScheduler.start();
 }
 
 start().catch((err) => {

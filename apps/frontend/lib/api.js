@@ -65,10 +65,6 @@ export function getPatternStats(patternId) {
   return request(`/api/patterns/${patternId}/stats`);
 }
 
-export function getWatchStatus() {
-  return request("/api/watch/status");
-}
-
 export function getWatchState() {
   return request("/api/watch/state");
 }
@@ -83,6 +79,10 @@ export function disableWatch() {
 
 export function listWatchNotifications(onlyUnseen = false) {
   return request(`/api/watch/notifications${onlyUnseen ? "?unseen=true" : ""}`);
+}
+
+export function getWatchNotification(id) {
+  return request(`/api/watch/notifications/${id}`);
 }
 
 export function markNotificationSeen(id) {

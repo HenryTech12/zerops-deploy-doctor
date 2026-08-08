@@ -1,55 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { disableWatch, enableWatch, getWatchState, getWatchStatus } from "../lib/api";
+import { useEffect, useState } from "react";
+import { disableWatch, enableWatch, getWatchState } from "../lib/api";
 
-const POLL_MS = 30000;
+const REFRESH_MS = 30000;
 
-// F8 — the on/off toggle is now persisted server-side (watch_state), so it
-// correctly shows "still on" after a refresh instead of resetting. Actual
-// checking is still done by the browser polling while the page is open —
-// there's no background worker (see README roadmap) — this just means the
-// toggle no longer lies about its own state.
-export default function WatchToggle({ onCaught, onNotification }) {
+// F8 — the actual runtime-log check now runs server-side on a real timer
+// (watchScheduler.js), independent of this tab being open. This component
+// is just the on/off toggle (persisted, so it restores correctly after a
+// refresh) plus a light read-only poll of when the server last checked —
+// it no longer does any checking itself.
+export default function WatchToggle() {
   const [watching, setWatching] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [lastChecked, setLastChecked] = useState(null);
-  const intervalRef = useRef(null);
 
   useEffect(() => {
-    getWatchState()
-      .then((r) => setWatching(r.enabled))
-      .catch(() => {})
-      .finally(() => setLoadingInitial(false));
-  }, []);
-
-  useEffect(() => {
-    if (!watching) {
-      clearInterval(intervalRef.current);
-      return;
+    function refresh() {
+      getWatchState()
+        .then((r) => {
+          setWatching(r.enabled);
+          if (r.last_checked) setLastChecked(new Date(r.last_checked));
+        })
+        .catch(() => {})
+        .finally(() => setLoadingInitial(false));
     }
-
-    const poll = async () => {
-      try {
-        const result = await getWatchStatus();
-        setLastChecked(new Date());
-        if (result.triggered && result.diagnosis) {
-          onCaught?.(result.diagnosis);
-          onNotification?.();
-        }
-      } catch {
-        // transient poll failure — try again on the next tick
-      }
-    };
-
-    poll();
-    intervalRef.current = setInterval(poll, POLL_MS);
-    return () => clearInterval(intervalRef.current);
-  }, [watching, onCaught, onNotification]);
+    refresh();
+    const interval = setInterval(refresh, REFRESH_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   async function toggle() {
     const next = !watching;
-    setWatching(next); // optimistic — polling starts/stops immediately
+    setWatching(next); // optimistic
     try {
       await (next ? enableWatch() : disableWatch());
     } catch {
@@ -80,9 +63,9 @@ export default function WatchToggle({ onCaught, onNotification }) {
         <p className="text-xs text-text-muted">
           {watching
             ? lastChecked
-              ? `Last checked ${lastChecked.toLocaleTimeString()} — polling every 30s`
-              : "Checking…"
-            : "Off — flip on to catch a failed deploy automatically"}
+              ? `Server last checked ${lastChecked.toLocaleTimeString()} — runs continuously`
+              : "Starting…"
+            : "Off — flip on to catch runtime errors automatically"}
         </p>
       </div>
     </div>

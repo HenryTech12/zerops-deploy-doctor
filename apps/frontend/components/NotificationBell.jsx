@@ -29,7 +29,7 @@ function timeAgo(iso) {
 // What Watch Mode caught, as a real dismissible in-app notification (DB
 // row, not React state) — a bell + unread badge is the familiar pattern
 // for "here's something you should look at when you get a chance."
-export default function NotificationBell({ notifications, onOpen }) {
+export default function NotificationBell({ notifications, onOpen, onSelect }) {
   const [open, setOpen] = useState(false);
   const unseenCount = notifications.filter((n) => !n.seen).length;
 
@@ -37,6 +37,11 @@ export default function NotificationBell({ notifications, onOpen }) {
     const next = !open;
     setOpen(next);
     if (next) onOpen?.();
+  }
+
+  function select(id) {
+    onSelect?.(id);
+    setOpen(false);
   }
 
   return (
@@ -66,7 +71,7 @@ export default function NotificationBell({ notifications, onOpen }) {
             <div className="px-4 py-3 border-b border-white/10">
               <p className="text-sm text-text-primary">Watch Mode notifications</p>
               <p className="text-xs text-text-muted mt-0.5">
-                Caught while this tab was open — page-open polling, not a background watch.
+                Caught by the background check — click one to review and decide on a fix.
               </p>
             </div>
 
@@ -78,21 +83,28 @@ export default function NotificationBell({ notifications, onOpen }) {
               )}
 
               {notifications.map((n) => (
-                <a
-                  key={n.id}
-                  href={`/replay/${n.replay_id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block px-4 py-3 hover:bg-white/5 transition"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`text-[10px] uppercase tracking-wide ${ERROR_TYPE_STYLES[n.error_type] || "text-text-muted"}`}>
-                      {n.error_type || "issue"}
-                    </span>
-                    <span className="text-[10px] text-text-muted shrink-0">{timeAgo(n.created_at)}</span>
-                  </div>
-                  <p className="text-sm text-text-primary mt-1 line-clamp-2">{n.cause}</p>
-                </a>
+                <div key={n.id} className="flex items-stretch hover:bg-white/5 transition">
+                  <button onClick={() => select(n.id)} className="flex-1 text-left px-4 py-3 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[10px] uppercase tracking-wide ${ERROR_TYPE_STYLES[n.error_type] || "text-text-muted"}`}>
+                        {n.error_type || "issue"}
+                      </span>
+                      <span className="text-[10px] text-text-muted shrink-0">{timeAgo(n.created_at)}</span>
+                    </div>
+                    <p className="text-sm text-text-primary mt-1 line-clamp-2">{n.cause}</p>
+                  </button>
+                  <a
+                    href={`/replay/${n.replay_id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center px-3 text-text-muted hover:text-aiblue transition shrink-0"
+                    title="Open shareable replay"
+                    aria-label="Open shareable replay"
+                  >
+                    ↗
+                  </a>
+                </div>
               ))}
             </div>
           </div>

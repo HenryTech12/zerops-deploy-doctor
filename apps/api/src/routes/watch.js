@@ -1,17 +1,14 @@
-// F8 Watch Mode — persisted toggle, runtime-log error detection (not just
-// deploy-status flips, which miss an app that's "running" per Zerops but
-// throwing errors on real requests), and in-app notifications. Polling
-// itself is still driven by the frontend while the page is open (see
-// watchMode.js for the "why no background worker" note).
+// F8 Watch Mode — the actual runtime-log check runs on a real server-side
+// timer (see watchScheduler.js), independent of any open browser tab.
+// These routes are just the toggle and the in-app notification list.
 const express = require("express");
-const zerops = require("../lib/zerops");
 const watchMode = require("../lib/watchMode");
 
 const router = express.Router();
 
 router.get("/state", async (req, res) => {
   const state = await watchMode.getState();
-  res.json({ enabled: state.enabled });
+  res.json({ enabled: state.enabled, last_checked: state.updated_at });
 });
 
 router.post("/enable", async (req, res) => {
@@ -29,6 +26,16 @@ router.get("/notifications", async (req, res) => {
   res.json({ notifications });
 });
 
+// Full record including the stored diagnosis — used when a notification
+// is clicked, to hydrate the live dashboard panel (fixed_yaml,
+// code_suggestion, etc.) so the fix can actually be reviewed and applied
+// from here, not just linked out to a read-only page.
+router.get("/notifications/:id", async (req, res) => {
+  const notification = await watchMode.getNotification(req.params.id);
+  if (!notification) return res.status(404).json({ error: "Notification not found." });
+  res.json({ notification });
+});
+
 router.post("/notifications/:id/seen", async (req, res) => {
   await watchMode.markSeen(req.params.id);
   res.json({ ok: true });
@@ -37,27 +44,6 @@ router.post("/notifications/:id/seen", async (req, res) => {
 router.post("/notifications/seen-all", async (req, res) => {
   await watchMode.markAllSeen();
   res.json({ ok: true });
-});
-
-router.get("/status", async (req, res) => {
-  const state = await watchMode.getState();
-  if (!state.enabled) {
-    return res.json({ watching: false });
-  }
-  if (!zerops.isConfigured()) {
-    return res.json({ watching: false, note: "API_TOKEN not configured" });
-  }
-
-  try {
-    const diagnosis = await watchMode.checkForNewError(process.env.PATIENT_SERVICE_ID);
-    if (diagnosis) {
-      return res.json({ watching: true, triggered: true, diagnosis });
-    }
-    res.json({ watching: true, triggered: false });
-  } catch (err) {
-    console.error("watch status error:", err);
-    res.status(500).json({ error: "Watch status check failed", detail: err.message });
-  }
 });
 
 module.exports = router;
