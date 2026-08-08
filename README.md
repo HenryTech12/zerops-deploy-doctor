@@ -123,8 +123,10 @@ pattern.
 | GET | `/api/github/app-info` | GitHub App slug + install URL, for the "Connect repo" button |
 | GET | `/api/github/repos` | repos the App's installation currently has access to |
 | GET | `/api/github/repos/:owner/:repo/files` | yaml/yml files in that repo, for the file picker |
+| GET | `/api/github/repos/:owner/:repo/branches` | branches in that repo, for the branch picker |
 | GET | `/api/github/connection` | the currently connected owner/repo/branch/file |
 | POST | `/api/github/connection` | `{owner, repo, branch?, yaml_path?}` → save the active connection |
+| GET | `/api/github/connection/content` | current content of the connected file — prefills the diagnose form |
 
 ## Running locally
 

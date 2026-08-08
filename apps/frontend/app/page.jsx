@@ -9,7 +9,14 @@ import Timeline from "../components/Timeline";
 import StatsTiles from "../components/StatsTiles";
 import WatchToggle from "../components/WatchToggle";
 import ConnectRepo from "../components/ConnectRepo";
-import { diagnose, applyFix, getStatus, getPatternStats, getReplay } from "../lib/api";
+import {
+  diagnose,
+  applyFix,
+  getStatus,
+  getPatternStats,
+  getReplay,
+  getGithubConnectionContent,
+} from "../lib/api";
 
 const STATUS_POLL_MS = 4000;
 
@@ -22,6 +29,8 @@ export default function Dashboard() {
   const [applyState, setApplyState] = useState(null); // null | "pending" | "success" | "fail" | "stopped"
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
+  const [connectedYaml, setConnectedYaml] = useState(undefined); // undefined = not loaded yet
+  const [loadingConnectedYaml, setLoadingConnectedYaml] = useState(false);
   const pollRef = useRef(null);
 
   const stopPolling = useCallback(() => {
@@ -30,6 +39,26 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
+
+  // Pulls the connected repo's actual zerops.yaml into the Input panel so
+  // the user only has to paste the error log, not the config too. Runs on
+  // load and again whenever ConnectRepo saves a new connection; a 404 (no
+  // connection yet) is expected and left non-fatal.
+  const refreshConnectedYaml = useCallback(async () => {
+    setLoadingConnectedYaml(true);
+    try {
+      const r = await getGithubConnectionContent();
+      setConnectedYaml(r.content);
+    } catch {
+      // no connection yet, or fetch failed — leave the form as-is
+    } finally {
+      setLoadingConnectedYaml(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshConnectedYaml();
+  }, [refreshConnectedYaml]);
 
   async function runDiagnosis(input) {
     setLoading(true);
@@ -122,7 +151,7 @@ export default function Dashboard() {
         <WatchToggle onCaught={onWatchCaught} />
       </header>
 
-      <ConnectRepo />
+      <ConnectRepo onConnected={refreshConnectedYaml} />
 
       {error && (
         <div className="rounded-md border border-coral/40 bg-coral/10 text-coral text-sm p-3">
@@ -135,7 +164,13 @@ export default function Dashboard() {
           <h2 className="font-display text-sm text-text-secondary uppercase tracking-wide">
             Input
           </h2>
-          <InputPanel onSubmit={runDiagnosis} loading={loading} />
+          <InputPanel
+            onSubmit={runDiagnosis}
+            loading={loading}
+            initialYaml={connectedYaml}
+            onReloadYaml={connectedYaml !== undefined ? refreshConnectedYaml : undefined}
+            reloadingYaml={loadingConnectedYaml}
+          />
         </section>
 
         <section className="space-y-3">

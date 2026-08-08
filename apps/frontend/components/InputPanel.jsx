@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-export default function InputPanel({ onSubmit, loading }) {
-  const [yaml, setYaml] = useState("");
+export default function InputPanel({ onSubmit, loading, initialYaml, onReloadYaml, reloadingYaml }) {
+  const [yaml, setYaml] = useState(initialYaml || "");
   const [log, setLog] = useState("");
   const [text, setText] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [mode, setMode] = useState("structured"); // structured | text
+
+  // initialYaml changes when a repo connection is (re)loaded — pulling the
+  // real committed zerops.yaml in so the user only has to paste the error
+  // log, not copy-paste the config by hand.
+  useEffect(() => {
+    if (initialYaml !== undefined) setYaml(initialYaml);
+  }, [initialYaml]);
 
   function submit(e) {
     e.preventDefault();
@@ -42,7 +49,19 @@ export default function InputPanel({ onSubmit, loading }) {
       {mode === "structured" ? (
         <>
           <div>
-            <label className="text-xs text-text-muted">zerops.yaml</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-text-muted">zerops.yaml</label>
+              {onReloadYaml && (
+                <button
+                  type="button"
+                  onClick={onReloadYaml}
+                  disabled={reloadingYaml}
+                  className="text-xs text-aiblue hover:underline disabled:opacity-50"
+                >
+                  {reloadingYaml ? "Loading…" : "Reload from connected repo"}
+                </button>
+              )}
+            </div>
             <textarea
               value={yaml}
               onChange={(e) => setYaml(e.target.value)}

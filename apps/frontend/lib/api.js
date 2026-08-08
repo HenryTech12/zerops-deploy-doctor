@@ -63,6 +63,14 @@ export function getGithubConnection() {
   return request("/api/github/connection");
 }
 
+export function getGithubConnectionContent() {
+  return request("/api/github/connection/content");
+}
+
+export function listGithubRepoBranches(owner, repo) {
+  return request(`/api/github/repos/${owner}/${repo}/branches`);
+}
+
 export function saveGithubConnection({ owner, repo, branch, yaml_path }) {
   return request("/api/github/connection", {
     method: "POST",

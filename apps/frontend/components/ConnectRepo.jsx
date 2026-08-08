@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getGithubAppInfo,
   getGithubConnection,
+  listGithubRepoBranches,
   listGithubRepoFiles,
   listGithubRepos,
   saveGithubConnection,
@@ -20,7 +21,7 @@ function GithubMark({ className }) {
 // F2's real "connect a repo" flow, modeled on Vercel/Render's Git import
 // UI: connect the GitHub App, browse an actual repo list in a modal,
 // pick one, configure branch + config file, done.
-export default function ConnectRepo() {
+export default function ConnectRepo({ onConnected }) {
   const [appInfo, setAppInfo] = useState(null);
   const [connection, setConnection] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -29,6 +30,7 @@ export default function ConnectRepo() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [files, setFiles] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [branch, setBranch] = useState("main");
   const [yamlPath, setYamlPath] = useState("zerops.yaml");
   const [loading, setLoading] = useState(false);
@@ -83,10 +85,14 @@ export default function ConnectRepo() {
     setBranch(repo.default_branch || "main");
     setYamlPath("zerops.yaml");
     setFiles([]);
+    setBranches([]);
     setStep("configure");
     listGithubRepoFiles(repo.owner, repo.repo, repo.default_branch || "main")
       .then((r) => setFiles(r.files))
       .catch(() => setFiles([]));
+    listGithubRepoBranches(repo.owner, repo.repo)
+      .then((r) => setBranches(r.branches))
+      .catch(() => setBranches([]));
   }
 
   async function onConnect() {
@@ -102,6 +108,7 @@ export default function ConnectRepo() {
       });
       setConnection(r.connection);
       setModalOpen(false);
+      onConnected?.();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -330,11 +337,33 @@ export default function ConnectRepo() {
 
                 <label className="block text-xs text-text-muted">
                   Branch
-                  <input
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
-                  />
+                  {branches.length > 0 ? (
+                    <select
+                      value={branch}
+                      onChange={(e) => {
+                        const newBranch = e.target.value;
+                        setBranch(newBranch);
+                        setFiles([]);
+                        listGithubRepoFiles(selected.owner, selected.repo, newBranch)
+                          .then((r) => setFiles(r.files))
+                          .catch(() => setFiles([]));
+                      }}
+                      className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
+                    >
+                      {branches.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      placeholder="Loading branches…"
+                      className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
+                    />
+                  )}
                 </label>
 
                 <label className="block text-xs text-text-muted">

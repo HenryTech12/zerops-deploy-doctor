@@ -79,6 +79,29 @@ async function listInstallationYamlFiles(owner, repo, branch) {
     .map((n) => n.path);
 }
 
+/** Branches in an installation-accessible repo, for the "Connect repo"
+ * branch picker — same installation-token access as the file picker. */
+async function listInstallationBranches(owner, repo) {
+  const headers = await ghWriteHeaders();
+  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/branches?per_page=100`, { headers });
+  if (!res.ok) throw new Error(`GitHub branches fetch failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return (data || []).map((b) => b.name);
+}
+
+/** The current content of a file in an installation-accessible repo — used
+ * to prefill the diagnose form's yaml box with the connected repo's actual
+ * config instead of making the user copy-paste it in by hand. */
+async function getFileContent(owner, repo, path, branch) {
+  const headers = await ghWriteHeaders();
+  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
+    headers,
+  });
+  if (!res.ok) throw new Error(`GitHub file fetch failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return Buffer.from(data.content, "base64").toString("utf8");
+}
+
 async function getDefaultBranch(owner, repo) {
   const res = await fetch(`${API_BASE}/repos/${owner}/${repo}`, { headers: ghHeaders() });
   if (!res.ok) throw new Error(`GitHub repo lookup failed: ${res.status}`);
@@ -144,6 +167,8 @@ module.exports = {
   fetchRelevantSources,
   commitFile,
   listInstallationYamlFiles,
+  listInstallationBranches,
+  getFileContent,
   getAppInfo: () => githubApp.getAppInfo(),
   listInstallationRepos: () => githubApp.listInstallationRepos(),
   isWriteConfigured: () => githubApp.isConfigured(),

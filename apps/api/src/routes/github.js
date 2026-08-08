@@ -54,12 +54,43 @@ router.get("/repos/:owner/:repo/files", async (req, res) => {
   }
 });
 
+router.get("/repos/:owner/:repo/branches", async (req, res) => {
+  if (!requireConfigured(res)) return;
+  const { owner, repo } = req.params;
+  try {
+    const branches = await github.listInstallationBranches(owner, repo);
+    res.json({ branches });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to list repo branches", detail: err.message });
+  }
+});
+
 router.get("/connection", async (req, res) => {
   try {
     const connection = await repoConnection.getConnection();
     res.json({ connection });
   } catch (err) {
     res.status(500).json({ error: "Failed to load connection", detail: err.message });
+  }
+});
+
+// The connected file's current content — lets the dashboard prefill the
+// diagnose form with the real zerops.yaml instead of the user copy-pasting
+// it in by hand.
+router.get("/connection/content", async (req, res) => {
+  if (!requireConfigured(res)) return;
+  try {
+    const connection = await repoConnection.getConnection();
+    if (!connection) return res.status(404).json({ error: "No repo connected." });
+    const content = await github.getFileContent(
+      connection.owner,
+      connection.repo,
+      connection.yaml_path,
+      connection.branch
+    );
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch file content", detail: err.message });
   }
 });
 
