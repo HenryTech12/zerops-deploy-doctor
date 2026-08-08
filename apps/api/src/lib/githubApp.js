@@ -15,17 +15,30 @@ function base64url(input) {
 // GitHub private keys are PEM (multi-line). Env var UIs mangle that in a
 // few different ways depending on how the value was pasted — this repairs
 // each one rather than assuming a single format:
+//   - base64-encoded PEM (recommended — see README; immune to every kind of
+//     whitespace/newline mangling below since it round-trips exactly)
 //   - wrapping quotes some UIs add literally around a pasted value
 //   - real newlines converted to literal "\n" escape sequences
 //   - CRLF line endings
 //   - newlines dropped entirely, collapsing the whole PEM onto one line
-//     (seen live: this is what produced Node's undecodable-key error)
+//     (seen live: this alone still produced Node's undecodable-key error,
+//     which is why base64 is now the recommended path)
 function normalizePrivateKey(key) {
   let k = key.trim();
 
   if ((k.startsWith('"') && k.endsWith('"')) || (k.startsWith("'") && k.endsWith("'"))) {
     k = k.slice(1, -1).trim();
   }
+
+  if (!k.includes("BEGIN")) {
+    try {
+      const decoded = Buffer.from(k, "base64").toString("utf8");
+      if (decoded.includes("BEGIN")) k = decoded.trim();
+    } catch {
+      // not base64 — fall through and let the PEM repairs below try
+    }
+  }
+
   if (k.includes("\\n")) k = k.replace(/\\n/g, "\n");
   k = k.replace(/\r\n/g, "\n").trim();
 
@@ -58,15 +71,33 @@ function signAppJWT() {
   const payload = base64url(JSON.stringify({ iat: now - 60, exp: now + 600, iss: Number(appId) }));
   const signingInput = `${header}.${payload}`;
 
+  const normalizedKey = normalizePrivateKey(privateKey);
+  if (!normalizedKey.includes("BEGIN") || !normalizedKey.includes("END")) {
+    // Fails fast with something actionable instead of OpenSSL's opaque
+    // "DECODER routines::unsupported" — the key value that reached this
+    // process doesn't even look like PEM/base64-PEM after every repair
+    // attempt, which usually means it was truncated when pasted/saved.
+    throw new Error(
+      `GITHUB_APP_PRIVATE_KEY doesn't look like a valid key after normalization (length ${normalizedKey.length}, no BEGIN/END markers) — it was likely truncated or corrupted when set. Re-copy the .pem file's full contents, or base64-encode it first (see README).`
+    );
+  }
+
   const signer = crypto.createSign("RSA-SHA256");
   signer.update(signingInput);
   signer.end();
-  const signature = signer
-    .sign(normalizePrivateKey(privateKey))
-    .toString("base64")
-    .replace(/=+$/, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+  let signature;
+  try {
+    signature = signer
+      .sign(normalizedKey)
+      .toString("base64")
+      .replace(/=+$/, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+  } catch (err) {
+    throw new Error(
+      `Failed to sign with GITHUB_APP_PRIVATE_KEY (${err.message}) — the key value (length ${normalizedKey.length} after normalization) isn't valid PEM. Re-copy the .pem file's full contents, or base64-encode it first (see README).`
+    );
+  }
 
   return `${signingInput}.${signature}`;
 }

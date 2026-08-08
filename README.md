@@ -177,9 +177,16 @@ pattern Vercel/Netlify use), not a static personal access token:
 4. **Where can this app be installed:** "Only on this account" is fine
 5. Create the app, then **Generate a private key** — downloads a `.pem` file
 6. Set `GITHUB_APP_ID` (shown on the app's settings page) and
-   `GITHUB_APP_PRIVATE_KEY` (the `.pem` file's contents — if your env var UI
-   doesn't accept multi-line values, replace real newlines with literal
-   `\n`, the code un-escapes either form) on the `api` service
+   `GITHUB_APP_PRIVATE_KEY` on the `api` service. **Recommended:** base64-encode
+   the `.pem` file first and paste that instead of the raw contents —
+   multi-line PEM pasted into a single-line env var field gets mangled in
+   enough different ways (dropped newlines, added quotes) that base64 is the
+   only form confirmed to survive every env var UI reliably:
+   ```
+   base64 -w0 your-key.pem   # macOS: base64 -i your-key.pem
+   ```
+   The raw `.pem` contents still work too (the code detects and repairs the
+   common mangled forms), but if you hit a signing error, switch to base64.
 
 `apps/api/src/lib/githubApp.js` signs a JWT with that key and exchanges it
 for a ~1-hour installation access token on demand.
