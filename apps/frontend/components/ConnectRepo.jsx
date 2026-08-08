@@ -18,10 +18,19 @@ function GithubMark({ className }) {
   );
 }
 
+function ScanMark({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
 // F2's real "connect a repo" flow, modeled on Vercel/Render's Git import
 // UI: connect the GitHub App, browse an actual repo list in a modal,
 // pick one, configure branch + config file, done.
-export default function ConnectRepo({ onConnected }) {
+export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
   const [appInfo, setAppInfo] = useState(null);
   const [connection, setConnection] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -138,7 +147,7 @@ export default function ConnectRepo({ onConnected }) {
 
   return (
     <>
-      <div className="rounded-lg border border-white/10 bg-panel p-4 flex items-center justify-between">
+      <div className="rounded-lg border border-white/10 bg-panel p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {connection ? (
           <>
             <div className="flex items-center gap-3 min-w-0">
@@ -152,12 +161,25 @@ export default function ConnectRepo({ onConnected }) {
                 </p>
               </div>
             </div>
-            <button
-              onClick={openModal}
-              className="shrink-0 rounded-md border border-white/10 px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:border-white/20 transition"
-            >
-              Change
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {onAnalyze && (
+                <button
+                  onClick={onAnalyze}
+                  disabled={analyzing}
+                  className="flex items-center gap-1.5 rounded-md bg-teal/10 border border-teal/30 text-teal px-3 py-1.5 text-xs font-medium hover:bg-teal/20 transition disabled:opacity-50"
+                  title="Diagnose without pasting anything — scan the connected repo directly"
+                >
+                  <ScanMark className="h-3.5 w-3.5" />
+                  {analyzing ? "Analyzing…" : "Analyze codebase"}
+                </button>
+              )}
+              <button
+                onClick={openModal}
+                className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:border-white/20 transition"
+              >
+                Change
+              </button>
+            </div>
           </>
         ) : (
           <>

@@ -17,10 +17,10 @@ async function request(path, options) {
   return body;
 }
 
-export function diagnose({ yaml, log, text, repo_url, replay_id }) {
+export function diagnose({ yaml, log, text, repo_url, use_connected_repo, replay_id }) {
   return request("/api/diagnose", {
     method: "POST",
-    body: JSON.stringify({ yaml, log, text, repo_url, replay_id }),
+    body: JSON.stringify({ yaml, log, text, repo_url, use_connected_repo, replay_id }),
   });
 }
 

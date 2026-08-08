@@ -97,7 +97,7 @@ zerops.yaml      main project: frontend + api + db
 | F4 | Learning Mode (`next_time_tip`, difficulty) | ✅ core |
 | F5 | Community Fix Intelligence — real counts only | ✅ |
 | F6 | Deploy Replay Timeline — public `/replay/:id` | ✅ signature feature |
-| F7 | Runtime & code error diagnosis (copy-paste, never auto-applied) | ✅ |
+| F7 | Runtime & code error diagnosis (copy-paste, or "Analyze codebase" on a connected repo — never auto-applied) | ✅ |
 | F8 | Watch Mode — page-open polling, edge-triggered auto-diagnosis | ✅ |
 | F9 | Learning from failed fixes (`failed_fixes` table) | ✅ |
 
@@ -114,7 +114,7 @@ pattern.
 
 | Method | Route | Purpose |
 |---|---|---|
-| POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, replay_id?}` → rules engine + LLM → diagnosis JSON |
+| POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, use_connected_repo?, replay_id?}` → rules engine + LLM → diagnosis JSON |
 | POST | `/api/apply-fix` | `{replay_id, fixed_yaml}` → commit the fix to the patient repo, Zerops redeploys on push (config errors only) |
 | GET | `/api/status/:replay_id` | poll deploy status; appends timeline events on state change |
 | GET | `/api/replay/:id` | public, read-only replay data — no auth |
@@ -201,6 +201,12 @@ branch, and yaml file → **Save connection**. That connection (stored in the
 `repo_connection` table) is what F2's apply-fix commits to; single-tenant by
 design (one App, one installation, one active connection at a time — see
 roadmap for multi-user).
+
+Once a repo is connected, the dashboard's diagnose form auto-loads its real
+`zerops.yaml` (no copy-paste needed — just paste the error log), and an
+**Analyze codebase** button on the connection card runs F7 straight against
+the connected repo's source with no pasted error required at all — useful
+for the "something's wrong but I don't have a log yet" case.
 
 ## The patient app
 

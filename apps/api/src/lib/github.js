@@ -162,9 +162,44 @@ async function fetchRelevantSources(repoUrl, maxFiles = 4) {
     .join("\n\n");
 }
 
+/**
+ * Same idea as fetchRelevantSources, but for the connected repo via the
+ * App's installation token instead of GITHUB_TOKEN/anonymous access — the
+ * connected repo may be private, and the public path can't read those.
+ * Used by "analyze codebase" (a full scan, not tied to one pasted error).
+ */
+async function fetchRelevantSourcesForRepo(owner, repo, branch, maxFiles = 6) {
+  const headers = await ghWriteHeaders();
+  const treeRes = await fetch(`${API_BASE}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, {
+    headers,
+  });
+  if (!treeRes.ok) throw new Error(`GitHub tree fetch failed: ${treeRes.status} ${await treeRes.text()}`);
+  const treeData = await treeRes.json();
+  const paths = (treeData.tree || []).filter((n) => n.type === "blob").map((n) => n.path);
+
+  const candidates = paths.filter((p) => CANDIDATE_PATTERNS.some((re) => re.test(p)));
+  const shortlist = (candidates.length ? candidates : paths.filter((p) => /\.(js|ts)$/.test(p))).slice(
+    0,
+    maxFiles
+  );
+
+  const files = await Promise.all(
+    shortlist.map(async (p) => ({
+      path: p,
+      content: await getFileContent(owner, repo, p, branch).catch(() => null),
+    }))
+  );
+
+  return files
+    .filter((f) => f.content)
+    .map((f) => `--- ${f.path} ---\n${f.content}`)
+    .join("\n\n");
+}
+
 module.exports = {
   parseRepoUrl,
   fetchRelevantSources,
+  fetchRelevantSourcesForRepo,
   commitFile,
   listInstallationYamlFiles,
   listInstallationBranches,

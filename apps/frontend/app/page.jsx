@@ -66,7 +66,7 @@ export default function Dashboard() {
     try {
       const result = await diagnose(input);
       setDiagnosis(result);
-      setOriginalYaml(input.yaml || "");
+      setOriginalYaml(input.yaml || (input.use_connected_repo ? connectedYaml || "" : ""));
       await refreshEvents(result.replay_id);
       if (result.pattern_id) {
         getPatternStats(result.pattern_id).then(setStats).catch(() => setStats(null));
@@ -151,7 +151,11 @@ export default function Dashboard() {
         <WatchToggle onCaught={onWatchCaught} />
       </header>
 
-      <ConnectRepo onConnected={refreshConnectedYaml} />
+      <ConnectRepo
+        onConnected={refreshConnectedYaml}
+        onAnalyze={() => runDiagnosis({ use_connected_repo: true })}
+        analyzing={loading}
+      />
 
       {error && (
         <div className="rounded-md border border-coral/40 bg-coral/10 text-coral text-sm p-3">

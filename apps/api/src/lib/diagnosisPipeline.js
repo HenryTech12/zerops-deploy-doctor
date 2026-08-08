@@ -5,6 +5,11 @@ const rulesEngine = require("./rulesEngine");
 const llm = require("./llm");
 const github = require("./github");
 const replays = require("./replays");
+const repoConnection = require("./repoConnection");
+
+const ANALYZE_CODEBASE_PROMPT =
+  "No specific error was reported. Review the source files below for the most likely bug, " +
+  "misconfiguration, or runtime failure risk, and report the single most significant issue you find.";
 
 async function buildAttemptHistory(replayId, latestLog) {
   if (!replayId) return [];
@@ -48,7 +53,7 @@ function fallbackDiagnosis(pattern, hint, reason) {
  * "fail" timeline event, and returns the diagnosis JSON + replay/attempt ids.
  * Used for both explicit user submissions and F8's automatic trigger.
  */
-async function runDiagnosis({ yaml, log, text, repoUrl, existingReplayId, titleHint }) {
+async function runDiagnosis({ yaml, log, text, repoUrl, useConnectedRepo, existingReplayId, titleHint }) {
   let routerResult = null;
   if (text && llm.isConfigured()) {
     try {
@@ -59,13 +64,33 @@ async function runDiagnosis({ yaml, log, text, repoUrl, existingReplayId, titleH
   }
 
   let sourceFiles = "";
-  if (repoUrl) {
+  let connection = null;
+  if (useConnectedRepo) {
+    connection = await repoConnection.getConnection();
+    if (!connection) {
+      throw new Error("No repo connected — connect one in the dashboard first.");
+    }
+    try {
+      sourceFiles = await github.fetchRelevantSourcesForRepo(
+        connection.owner,
+        connection.repo,
+        connection.branch
+      );
+    } catch (err) {
+      sourceFiles = `(could not fetch source: ${err.message})`;
+    }
+  } else if (repoUrl) {
     try {
       sourceFiles = await github.fetchRelevantSources(repoUrl);
     } catch (err) {
       sourceFiles = `(could not fetch source: ${err.message})`;
     }
   }
+
+  // "Analyze codebase" has no pasted error to go on — give the LLM an
+  // explicit instruction instead of an empty errorLog so it knows to scan
+  // rather than explain a specific failure that doesn't exist.
+  const effectiveLog = log || (useConnectedRepo && !text ? ANALYZE_CODEBASE_PROMPT : "");
 
   const { pattern, hint } = await rulesEngine.matchFailurePattern(yaml, log);
   if (pattern) await rulesEngine.recordSeen(pattern.id);
@@ -77,7 +102,7 @@ async function runDiagnosis({ yaml, log, text, repoUrl, existingReplayId, titleH
     try {
       diagnosis = await llm.diagnose({
         yamlContent: yaml,
-        errorLog: log || (routerResult ? `(user description) ${text}` : ""),
+        errorLog: effectiveLog || (routerResult ? `(user description) ${text}` : ""),
         sourceFiles,
         matchedPattern: pattern,
         attemptHistory,
