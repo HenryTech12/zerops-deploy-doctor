@@ -150,9 +150,25 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const result = await diagnose({ ...input, username: username || undefined });
+      // A connected session is a standing signal of intent — "diagnose
+      // against this repo" — so default to grounding in it whenever the
+      // caller hasn't already decided (Analyze codebase always passes its
+      // own true; a manually pasted "Public GitHub repo" URL should win
+      // instead of being silently ignored). Without this, plain-English
+      // submissions like "go through my codebase" had nothing to look at:
+      // that mode never sends yaml/log/sourceFiles on its own, only text.
+      const hasConnectedRepo = connectedYaml !== undefined;
+      const finalInput = {
+        ...input,
+        username: username || undefined,
+        use_connected_repo:
+          input.use_connected_repo !== undefined
+            ? input.use_connected_repo
+            : hasConnectedRepo && !input.repo_url,
+      };
+      const result = await diagnose(finalInput);
       setDiagnosis(result);
-      setOriginalYaml(input.yaml || (input.use_connected_repo ? connectedYaml || "" : ""));
+      setOriginalYaml(finalInput.yaml || (finalInput.use_connected_repo ? connectedYaml || "" : ""));
       await refreshEvents(result.replay_id);
       if (result.pattern_id) {
         getPatternStats(result.pattern_id).then(setStats).catch(() => setStats(null));

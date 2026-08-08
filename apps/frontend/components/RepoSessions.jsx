@@ -652,6 +652,11 @@ export default function RepoSessions({ username, onConnected, onAnalyze, analyzi
                       className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
                     />
                   )}
+                  <span className="block text-[11px] text-text-muted mt-1 normal-case">
+                    Only this file gets committed by Apply Fix. To scan or pick from your source
+                    code, use "Analyze codebase" after creating the session — every diagnosis also
+                    pulls from this repo automatically once it's active.
+                  </span>
                 </label>
 
                 <div className="flex items-center gap-2 pt-1">
