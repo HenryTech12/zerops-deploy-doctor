@@ -32,6 +32,11 @@ function fallbackDiagnosis(pattern, hint, reason) {
       fixed_yaml: null,
       file_path: null,
       code_suggestion: null,
+      // A known rules-engine pattern is a real signature match, not a
+      // guess — but still capped below "high" since there's no LLM
+      // cross-check confirming it fits this specific log.
+      confidence: 65,
+      confidence_reason: "Matched a known rules-engine pattern; the LLM was unavailable to cross-check it.",
       next_time_tip: pattern.canonical_fix,
       difficulty: pattern.difficulty || "Beginner",
     };
@@ -44,6 +49,8 @@ function fallbackDiagnosis(pattern, hint, reason) {
     fixed_yaml: null,
     file_path: null,
     code_suggestion: null,
+    confidence: 10,
+    confidence_reason: "No rules-engine match and no LLM available — this is barely more than a guess.",
     next_time_tip: "Keep zerops.yaml and logs handy — DeployDoctor pattern-matches on both.",
     difficulty: "Beginner",
   };
@@ -170,6 +177,29 @@ async function runDiagnosis({
     }
   } else {
     diagnosis = fallbackDiagnosis(pattern, hint, "GROQ_API_KEY not configured");
+  }
+
+  // A code fix can only be safely committed (as opposed to copy-paste
+  // only) if we can diff it against the file's real current content —
+  // and that's also the check that catches the LLM returning a snippet
+  // instead of the full file it was instructed to when source was
+  // available (see llm.js): if code_suggestion turns out much shorter
+  // than the real file, it's not a safe whole-file replacement, and
+  // original_file_content simply won't be attached, so the UI falls back
+  // to copy-paste. Only reachable via a connected session — the
+  // read-only public repoUrl path never gets commit capability.
+  if (diagnosis.error_type === "code" && diagnosis.file_path && diagnosis.code_suggestion && connection) {
+    try {
+      diagnosis.original_file_content = await github.getFileContent(
+        connection.owner,
+        connection.repo,
+        diagnosis.file_path,
+        connection.branch
+      );
+    } catch {
+      // File doesn't exist at that exact path (LLM guessed slightly
+      // wrong), or fetch failed — leave undefined, copy-paste-only.
+    }
   }
 
   let patternId = pattern?.id || null;

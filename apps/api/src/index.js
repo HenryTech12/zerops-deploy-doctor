@@ -6,6 +6,7 @@ const { seed } = require("../../../db/seed");
 
 const diagnoseRoute = require("./routes/diagnose");
 const applyFixRoute = require("./routes/applyFix");
+const applyCodeFixRoute = require("./routes/applyCodeFix");
 const statusRoute = require("./routes/status");
 const replayRoute = require("./routes/replay");
 const patternsRoute = require("./routes/patterns");
@@ -27,6 +28,7 @@ app.get("/health", (req, res) => res.json({ ok: true, service: "deploydoctor-api
 
 app.use("/api/diagnose", diagnoseRoute);
 app.use("/api/apply-fix", applyFixRoute);
+app.use("/api/apply-code-fix", applyCodeFixRoute);
 app.use("/api/status", statusRoute);
 app.use("/api/replay", replayRoute); // public, no auth — F6
 app.use("/api/patterns", patternsRoute);

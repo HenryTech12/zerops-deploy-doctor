@@ -13,12 +13,16 @@ Built for **The Zerops Challenge** (WeMakeDevs × Zerops), August 8–9, 2026.
 ## The scope boundary
 
 > Auto-fix what the tool owns (infrastructure config). Advise on what the
-> user owns (their code).
+> user owns (their code) — unless they explicitly decide otherwise.
 
-Config errors get a diff and a one-click apply-and-redeploy. Code errors get
-a copy-paste fix the user applies and pushes themselves — DeployDoctor never
-writes to a user's repository. Nothing deploys without an explicit user
-click.
+Config errors get a diff and a one-click apply-and-redeploy. Code errors
+default to a copy-paste fix the user applies and pushes themselves — but
+when the diagnosis pipeline can fetch the file's real current content (a
+repo is connected and the LLM returned a full-file replacement, not a
+snippet — see "Code fix confidence & commit"), the same diff-and-click
+pattern is offered for code too, gated behind an LLM-generated confidence
+score so the decision is informed, not a black box. Nothing deploys or
+commits without an explicit user click, ever.
 
 ## The core loop
 
@@ -35,7 +39,9 @@ click.
    Zerops's own push-to-branch pipeline trigger redeploys it → status
    polled until healthy.
 4. **Code errors:** with repo access, DeployDoctor locates the offending file
-   and line and shows a copy-paste replacement.
+   and line and shows a copy-paste replacement — or, when it could safely
+   diff against the real file, a reviewable diff with a confidence score
+   and a one-click commit, same as config.
 5. Every cycle lands on the **Deploy Replay Timeline** — a public, shareable
    URL.
 6. Every fix teaches (Learning Mode) and feeds honest community stats (Fix
@@ -101,7 +107,7 @@ zerops.yaml      main project: frontend + api + db
 | F4 | Learning Mode (`next_time_tip`, difficulty) | ✅ core |
 | F5 | Community Fix Intelligence — real counts only | ✅ |
 | F6 | Deploy Replay Timeline — public `/replay/:id` | ✅ signature feature |
-| F7 | Runtime & code error diagnosis (copy-paste, or "Analyze codebase" on a connected repo — never auto-applied) | ✅ |
+| F7 | Runtime & code error diagnosis, with a confidence score; commit-and-redeploy when a real file diff is possible, copy-paste otherwise | ✅ |
 | F8 | Watch Mode — persisted toggle, runtime-log error detection, in-app notifications | ✅ |
 | F9 | Learning from failed fixes (`failed_fixes` table) | ✅ |
 
@@ -121,6 +127,7 @@ pattern.
 |---|---|---|
 | POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, use_connected_repo?, file_paths?, replay_id?, username?}` → rules engine + LLM → diagnosis JSON |
 | POST | `/api/apply-fix` | `{replay_id, fixed_yaml}` → validates the fix is a real Zerops schema, then commits it to the patient repo; Zerops redeploys on push (config errors only) |
+| POST | `/api/apply-code-fix` | `{replay_id, file_path, code_suggestion}` → re-fetches the file's current content server-side, refuses anything that looks like a truncated snippet, then commits (code errors, only when a real diff was possible) |
 | GET | `/api/status/:replay_id` | poll deploy status; appends timeline events on state change |
 | GET | `/api/replay/:id` | public, read-only replay data — no auth |
 | GET | `/api/replay?username=` | recent diagnoses for a signed-in username — powers "Recent diagnoses" |
@@ -291,6 +298,40 @@ then decide whether to apply it. Both the toggle and the notification list
 are stored in Postgres (`watch_state`, `watch_notifications`), so they
 survive a refresh. Watch Mode only decides *when to diagnose*, never
 *whether to apply* — that's still always an explicit click.
+
+## Code fix confidence & commit (F7)
+
+Code errors default to copy-paste — `code_suggestion` shown as-is, the user
+pastes it in and pushes. But when a repo is connected and the diagnosis
+pipeline can fetch the file the LLM identified (`file_path`), the same
+diff-and-commit pattern config fixes already use is offered for code too:
+
+1. The system prompt requires that whenever a file's real content was
+   visible in the LLM's context ("Source files"), `code_suggestion` must be
+   that file's *complete* content with the minimal fix applied — never a
+   snippet — because it's committed directly to replace the file. If the
+   file wasn't visible, `code_suggestion` stays a snippet/instructions,
+   since the LLM can't safely reconstruct a whole file it hasn't seen.
+2. `diagnosisPipeline.js` then fetches that file's actual current content
+   (`original_file_content`) to diff against. Commit capability only ever
+   appears when this fetch succeeds — no diff, no commit button, copy-paste
+   only.
+3. Every diagnosis also gets a **confidence score** (0-100, calibrated in
+   the prompt against how directly the evidence supports the root cause)
+   and a one-sentence reason, shown as a color-coded badge next to the fix.
+   Below 40, committing requires an extra "Commit anyway?" confirmation
+   step — the score informs the decision, it never blocks it outright.
+4. `POST /api/apply-code-fix` re-fetches the file's current content
+   **server-side** (never trusts whatever the client sends) and refuses to
+   commit if `code_suggestion` is far shorter than that real content —
+   the actual defense against a snippet slipping through and overwriting
+   the rest of a file, not just the prompt instruction in step 1. Verified
+   locally: a full-file replacement commits, a snippet gets a 422 and
+   never touches the repo, confirmed by asserting on the mocked commit
+   count directly.
+
+Applying the fix — config or code — is always the same explicit click; this
+only widens *what kind* of fix can go through that door, never who decides.
 
 ## The patient app
 

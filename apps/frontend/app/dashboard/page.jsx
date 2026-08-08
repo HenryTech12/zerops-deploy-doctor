@@ -15,6 +15,7 @@ import NotificationBell from "../../components/NotificationBell";
 import {
   diagnose,
   applyFix,
+  applyCodeFix,
   getStatus,
   getPatternStats,
   getReplay,
@@ -189,6 +190,35 @@ export default function Dashboard() {
     }
   }
 
+  // Shared by both commit paths (config's fixed_yaml and code's
+  // code_suggestion) so the "did we remember to clear applying on every
+  // resolution branch" bug that hit the config path once can't quietly
+  // reappear in a second, hand-duplicated copy for code fixes.
+  function startRedeployPolling(replayId, { onRetry }) {
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getStatus(replayId);
+        if (status.events) setEvents(status.events);
+        if (status.resolved === "success") {
+          setApplyState("success");
+          setApplying(false);
+          stopPolling();
+        } else if (status.resolved === "fail" && status.stopped) {
+          setApplyState("stopped");
+          setApplying(false);
+          stopPolling();
+        } else if (status.resolved === "fail") {
+          // Retry memory (F2, Level 1): feed the new log back into F1 automatically.
+          stopPolling();
+          setApplying(false);
+          await onRetry(status.new_log);
+        }
+      } catch {
+        // transient poll failure — try again next tick
+      }
+    }, STATUS_POLL_MS);
+  }
+
   async function onApply() {
     if (!diagnosis?.fixed_yaml || !diagnosis?.replay_id) return;
     setApplying(true);
@@ -200,37 +230,56 @@ export default function Dashboard() {
         fixed_yaml: diagnosis.fixed_yaml,
         pattern_id: diagnosis.pattern_id,
       });
-      pollRef.current = setInterval(async () => {
-        try {
-          const status = await getStatus(diagnosis.replay_id);
-          if (status.events) setEvents(status.events);
-          if (status.resolved === "success") {
-            setApplyState("success");
-            setApplying(false);
-            stopPolling();
-          } else if (status.resolved === "fail" && status.stopped) {
-            setApplyState("stopped");
-            setApplying(false);
-            stopPolling();
-          } else if (status.resolved === "fail") {
-            // Retry memory (F2, Level 1): feed the new log back into F1 automatically.
-            stopPolling();
-            setApplying(false);
-            const retried = await diagnose({
-              yaml: diagnosis.fixed_yaml,
-              log: status.new_log,
-              replay_id: diagnosis.replay_id,
-              username: username || undefined,
-            });
-            setDiagnosis(retried);
-            setOriginalYaml(diagnosis.fixed_yaml);
-            await refreshEvents(retried.replay_id);
-            setApplyState(null);
-          }
-        } catch {
-          // transient poll failure — try again next tick
-        }
-      }, STATUS_POLL_MS);
+      startRedeployPolling(diagnosis.replay_id, {
+        onRetry: async (newLog) => {
+          const retried = await diagnose({
+            yaml: diagnosis.fixed_yaml,
+            log: newLog,
+            replay_id: diagnosis.replay_id,
+            username: username || undefined,
+          });
+          setDiagnosis(retried);
+          setOriginalYaml(diagnosis.fixed_yaml);
+          await refreshEvents(retried.replay_id);
+          setApplyState(null);
+        },
+      });
+    } catch (err) {
+      setError(err.message);
+      setApplyState(null);
+      setApplying(false);
+    }
+  }
+
+  async function onApplyCode() {
+    if (!diagnosis?.code_suggestion || !diagnosis?.file_path || !diagnosis?.replay_id) return;
+    setApplying(true);
+    setApplyState("pending");
+    setError(null);
+    try {
+      await applyCodeFix({
+        replay_id: diagnosis.replay_id,
+        file_path: diagnosis.file_path,
+        code_suggestion: diagnosis.code_suggestion,
+        pattern_id: diagnosis.pattern_id,
+      });
+      startRedeployPolling(diagnosis.replay_id, {
+        onRetry: async (newLog) => {
+          // Force use_connected_repo (rather than relying on the default)
+          // so the retry re-fetches the file's post-commit content, not
+          // whatever was cached from before this fix landed.
+          const retried = await diagnose({
+            log: newLog,
+            use_connected_repo: true,
+            replay_id: diagnosis.replay_id,
+            username: username || undefined,
+          });
+          setDiagnosis(retried);
+          setOriginalYaml("");
+          await refreshEvents(retried.replay_id);
+          setApplyState(null);
+        },
+      });
     } catch (err) {
       setError(err.message);
       setApplyState(null);
@@ -317,7 +366,12 @@ export default function Dashboard() {
           )}
 
           {diagnosis?.error_type === "code" && (
-            <CodeFixCard filePath={diagnosis.file_path} codeSuggestion={diagnosis.code_suggestion} />
+            <CodeFixCard
+              diagnosis={diagnosis}
+              onCommit={diagnosis.original_file_content ? onApplyCode : undefined}
+              applying={applying}
+              applyState={applyState}
+            />
           )}
 
           {stats && (

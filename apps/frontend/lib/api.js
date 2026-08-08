@@ -53,6 +53,13 @@ export function applyFix({ replay_id, fixed_yaml, pattern_id }) {
   });
 }
 
+export function applyCodeFix({ replay_id, file_path, code_suggestion, pattern_id }) {
+  return request("/api/apply-code-fix", {
+    method: "POST",
+    body: JSON.stringify({ replay_id, file_path, code_suggestion, pattern_id }),
+  });
+}
+
 export function getStatus(replayId) {
   return request(`/api/status/${replayId}`);
 }

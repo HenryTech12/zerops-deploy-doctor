@@ -20,7 +20,7 @@ const CORE_LOOP = [
   "Connect a repo, paste a zerops.yaml + log, describe the problem in plain English — or flip on Watch Mode and let DeployDoctor catch failures by itself.",
   "A rules engine plus an LLM (Groq, gpt-oss) diagnose the real root cause.",
   "Config error → review the exact diff → click Apply → committed straight to your repo → Zerops redeploys → status polled until healthy.",
-  "Code error → DeployDoctor points at the exact file and line with a copy-paste fix, never writing to your repo.",
+  "Code error → DeployDoctor points at the exact file and line with a copy-paste fix by default — or, when it can safely diff against the real file, a reviewable diff with a confidence score and a one-click commit, same as config.",
   "Every cycle lands on a public, shareable Deploy Replay Timeline.",
   "Every fix teaches — a next-time tip, honest community stats, and memory of what didn't work.",
 ];
@@ -97,12 +97,14 @@ export default function Landing() {
       <div className="max-w-2xl mx-auto mt-16 rounded-lg border border-teal/30 bg-teal/5 p-6 text-center">
         <p className="text-xs uppercase tracking-widest text-teal font-mono">the approach</p>
         <p className="font-display text-lg sm:text-xl text-text-primary mt-2">
-          Auto-fix what the tool owns. Advise on what you own.
+          Auto-fix what the tool owns. Advise on what you own — unless you decide otherwise.
         </p>
         <p className="text-sm text-text-secondary mt-2 max-w-lg mx-auto">
-          Config errors get a diff and a one-click apply-and-redeploy. Code errors get a copy-paste
-          fix you apply yourself — DeployDoctor never writes to your application source. Nothing
-          deploys without an explicit click.
+          Config errors get a diff and a one-click apply-and-redeploy. Code errors default to a
+          copy-paste fix you apply yourself — but when DeployDoctor can safely diff against the
+          file's real content, it offers the same diff-and-commit flow, gated behind an
+          LLM-generated confidence score so you decide with real information. Nothing deploys
+          without an explicit click.
         </p>
       </div>
 

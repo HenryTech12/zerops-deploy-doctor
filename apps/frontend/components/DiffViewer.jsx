@@ -5,7 +5,7 @@ import { diffLines } from "diff";
 // A proper line-level diff, not a colored <pre> blob: line numbers, syntax
 // gutter, add/remove background tint per the design tokens. This is where
 // "IDE tool, not chatbox" is won — see build doc §10.
-export default function DiffViewer({ before, after }) {
+export default function DiffViewer({ before, after, filename = "zerops.yaml" }) {
   const parts = diffLines(before || "", after || "");
 
   let oldLineNo = 1;
@@ -28,7 +28,7 @@ export default function DiffViewer({ before, after }) {
   return (
     <div className="rounded-lg border border-white/10 bg-inset overflow-hidden">
       <div className="px-3 py-2 border-b border-white/10 text-xs text-text-secondary font-mono">
-        zerops.yaml
+        {filename}
       </div>
       <div className="overflow-x-auto max-h-96 font-mono text-xs leading-6">
         {rows.map((row, i) => (
