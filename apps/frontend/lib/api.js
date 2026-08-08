@@ -17,11 +17,33 @@ async function request(path, options) {
   return body;
 }
 
-export function diagnose({ yaml, log, text, repo_url, use_connected_repo, file_paths, replay_id }) {
+export function diagnose({
+  yaml,
+  log,
+  text,
+  repo_url,
+  use_connected_repo,
+  file_paths,
+  replay_id,
+  username,
+}) {
   return request("/api/diagnose", {
     method: "POST",
-    body: JSON.stringify({ yaml, log, text, repo_url, use_connected_repo, file_paths, replay_id }),
+    body: JSON.stringify({
+      yaml,
+      log,
+      text,
+      repo_url,
+      use_connected_repo,
+      file_paths,
+      replay_id,
+      username,
+    }),
   });
+}
+
+export function getMyReplays(username, limit = 10) {
+  return request(`/api/replay?username=${encodeURIComponent(username)}&limit=${limit}`);
 }
 
 export function applyFix({ replay_id, fixed_yaml, pattern_id }) {

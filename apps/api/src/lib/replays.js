@@ -5,15 +5,34 @@ const { query } = require("../db");
 
 const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 8);
 
-async function createReplay(title) {
+async function createReplay(title, username) {
   const id = nanoid();
-  await query("INSERT INTO replays (id, title) VALUES ($1, $2)", [id, title || null]);
+  await query("INSERT INTO replays (id, title, username) VALUES ($1, $2, $3)", [
+    id,
+    title || null,
+    username || null,
+  ]);
   return id;
 }
 
 async function getReplay(id) {
   const { rows } = await query("SELECT * FROM replays WHERE id = $1", [id]);
   return rows[0] || null;
+}
+
+/** Most recent replays for a signed-in username, each with its latest status —
+ * powers the dashboard's "Recent diagnoses" list and restores state on refresh. */
+async function getRecentByUsername(username, limit = 10) {
+  const { rows } = await query(
+    `SELECT r.id, r.title, r.created_at,
+       (SELECT e.status FROM replay_events e WHERE e.replay_id = r.id ORDER BY e.attempt_n DESC, e.id DESC LIMIT 1) AS latest_status
+     FROM replays r
+     WHERE r.username = $1
+     ORDER BY r.created_at DESC
+     LIMIT $2`,
+    [username, limit]
+  );
+  return rows;
 }
 
 async function nextAttemptNumber(replayId) {
@@ -42,4 +61,11 @@ async function getEvents(replayId) {
   return rows;
 }
 
-module.exports = { createReplay, getReplay, nextAttemptNumber, appendEvent, getEvents };
+module.exports = {
+  createReplay,
+  getReplay,
+  getRecentByUsername,
+  nextAttemptNumber,
+  appendEvent,
+  getEvents,
+};

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Timeline from "../../../components/Timeline";
 import { API_URL } from "../../../lib/api";
 
@@ -32,6 +33,11 @@ export default async function ReplayPage({ params }) {
         </p>
       </header>
       <Timeline events={replay.events} />
+      <div className="text-center">
+        <Link href="/dashboard" className="text-xs text-aiblue hover:underline">
+          ← Back to DeployDoctor
+        </Link>
+      </div>
     </main>
   );
 }

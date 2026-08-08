@@ -24,8 +24,14 @@ CREATE TABLE IF NOT EXISTS failed_fixes (
 CREATE TABLE IF NOT EXISTS replays (
   id         TEXT PRIMARY KEY,               -- short shareable slug
   created_at TIMESTAMPTZ DEFAULT now(),
-  title      TEXT
+  title      TEXT,
+  username   TEXT                            -- GitHub login, captured via OAuth on the landing
+                                              -- page; nullable — replays stay anonymous/public
+                                              -- by design (F6) when no one signed in
 );
+
+ALTER TABLE replays ADD COLUMN IF NOT EXISTS username TEXT;
+CREATE INDEX IF NOT EXISTS idx_replays_username ON replays(username);
 
 CREATE TABLE IF NOT EXISTS replay_events (
   id          SERIAL PRIMARY KEY,

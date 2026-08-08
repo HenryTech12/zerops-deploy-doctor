@@ -114,10 +114,13 @@ pattern.
 
 | Method | Route | Purpose |
 |---|---|---|
-| POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, use_connected_repo?, file_paths?, replay_id?}` → rules engine + LLM → diagnosis JSON |
-| POST | `/api/apply-fix` | `{replay_id, fixed_yaml}` → commit the fix to the patient repo, Zerops redeploys on push (config errors only) |
+| POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, use_connected_repo?, file_paths?, replay_id?, username?}` → rules engine + LLM → diagnosis JSON |
+| POST | `/api/apply-fix` | `{replay_id, fixed_yaml}` → validates the fix is a real Zerops schema, then commits it to the patient repo; Zerops redeploys on push (config errors only) |
 | GET | `/api/status/:replay_id` | poll deploy status; appends timeline events on state change |
 | GET | `/api/replay/:id` | public, read-only replay data — no auth |
+| GET | `/api/replay?username=` | recent diagnoses for a signed-in username — powers "Recent diagnoses" |
+| GET | `/api/auth/github/login` | starts "Continue with GitHub"; falls straight through to `/dashboard` if OAuth isn't configured |
+| GET | `/api/auth/github/callback` | OAuth callback — redirects back to `/dashboard?gh_user=...` |
 | GET | `/api/patterns/:id/stats` | F5 stat-tile data |
 | GET | `/api/watch/status` | F8 — polled every ~30s while Watch Mode is on |
 | GET | `/api/github/app-info` | GitHub App slug + install URL, for the "Connect repo" button |
@@ -212,6 +215,32 @@ pasted error required at all, useful for the "something's wrong but I don't
 have a log yet" case. "Auto-detect for me" skips picking entirely and falls
 back to the same entrypoint-name heuristic F7 always used.
 
+## GitHub sign-in (landing page, optional)
+
+`/` is a landing page with a **Continue with GitHub** button; `/dashboard`
+is the app itself, fully usable signed-out (there's also a "Skip" link
+straight there). Signing in only tags your diagnoses with your GitHub
+username so a "Recent diagnoses" list and refresh-safe history work — it's
+not an access gate, and no server-side session is created (the username is
+handed back as a redirect query param and stored in `localStorage`).
+
+This reuses the **same GitHub App** from the section above — no second app
+registration — via its standard user-to-server OAuth flow:
+
+1. On the App's settings page, note the **Client ID** and generate/copy a
+   **Client secret** (both live in the "General" section, above where the
+   private key lives)
+2. Set the App's **Callback URL** to `<api's public URL>/api/auth/github/callback`
+   (e.g. `https://api-2ab2-3001.prg1.zerops.app/api/auth/github/callback`) —
+   GitHub's OAuth `redirect_uri` must match this exactly
+3. Set `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, and
+   `API_PUBLIC_URL` (the same API URL as step 2, no trailing slash/path) on
+   the `api` service
+
+If any of those three aren't set, `/api/auth/github/login` just redirects
+straight to `/dashboard` — signing in degrades gracefully instead of
+breaking anything.
+
 ## The patient app
 
 [`apps/patient-app`](apps/patient-app) is deployed as its **own** Zerops
@@ -262,11 +291,11 @@ display, Inter for body text, JetBrains Mono for yaml/logs/diffs.
   GitHub App with short-lived installation tokens and a dashboard "Connect
   repo" UI (pick the repo/branch/file, not hardcoded — see "GitHub App
   setup"), but it's single-tenant — one App, one installation, one active
-  connection shared by everyone who opens the dashboard. A general
-  "connect any repo, per user" version would need per-user install
-  callbacks and, more fundamentally, something DeployDoctor doesn't have
-  today: user accounts/sessions, since replays are currently anonymous and
-  public by design.
+  connection shared by everyone who opens the dashboard. GitHub sign-in
+  (see "GitHub sign-in") gives DeployDoctor a lightweight notion of "who,"
+  but it's tagging, not accounts — no server-side session, no per-user
+  data isolation. A general "connect any repo, per user" version would
+  still need per-user install callbacks and real sessions on top of that.
 
 ## Known limitations
 

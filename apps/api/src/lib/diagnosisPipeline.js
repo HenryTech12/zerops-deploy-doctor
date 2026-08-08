@@ -62,6 +62,7 @@ async function runDiagnosis({
   filePaths,
   existingReplayId,
   titleHint,
+  username,
 }) {
   let routerResult = null;
   if (text && llm.isConfigured()) {
@@ -161,7 +162,8 @@ async function runDiagnosis({
   }
 
   const replayId =
-    existingReplayId || (await replays.createReplay(titleHint || diagnosis.cause?.slice(0, 80)));
+    existingReplayId ||
+    (await replays.createReplay(titleHint || diagnosis.cause?.slice(0, 80), username));
   const attemptN = await replays.nextAttemptNumber(replayId);
   await replays.appendEvent(replayId, {
     attemptN,

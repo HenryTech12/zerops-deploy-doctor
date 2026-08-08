@@ -62,10 +62,21 @@ zerops:
         # instead (same as every other secret here). Never put the actual
         # value here — this file is in a public repo.
         DATABASE_URL: <set in Zerops UI — paste db service's "connection string, with values" here>
+        # Landing page "Continue with GitHub" — optional, everything works
+        # without it (falls straight through to the dashboard signed-out).
+        # Reuses this same GitHub App's Client ID/Secret (its general
+        # settings page), not a separate OAuth App — but the App needs a
+        # Callback URL set to API_PUBLIC_URL + /api/auth/github/callback.
+        GITHUB_OAUTH_CLIENT_ID: <optional, set in Zerops UI>
+        GITHUB_OAUTH_CLIENT_SECRET: <optional, set in Zerops UI>
       env:
         PORT: 3001
         PATIENT_REPO: HenryTech12/deploydoctor-patient-app
         PATIENT_REPO_BRANCH: main
+        # This service's own public URL — must exactly match the GitHub
+        # App's Callback URL for OAuth login to work. Not knowable until
+        # first deploy; set in Zerops UI once you have the real domain.
+        # API_PUBLIC_URL: https://<actual-api-domain>.zerops.app
         # Left unset deliberately — the frontend's exact Zerops domain isn't
         # known until first deploy, and CORS is an exact-string match (a
         # trailing slash or wrong path silently breaks every request, as we
