@@ -9,6 +9,24 @@ const rulesEngine = require("../lib/rulesEngine");
 const router = express.Router();
 const MAX_ATTEMPTS = 3;
 
+// One-shot diagnostic — the /service-stack/:id status shape was never
+// confirmed against the real Zerops API (the deploy-trigger endpoint at a
+// similar path 404'd live), and the apply-fix -> redeploy loop is stuck
+// showing "Redeploying…" indefinitely despite the real deploy having
+// already succeeded. Returns the RAW response so normalizeStatus() can be
+// fixed against real data instead of guessed again.
+router.get("/debug/service", async (req, res) => {
+  if (!zerops.isConfigured()) {
+    return res.status(503).json({ error: "API_TOKEN not configured" });
+  }
+  try {
+    const raw = await zerops.getServiceStatus(process.env.PATIENT_SERVICE_ID);
+    res.json({ raw, normalized: zerops.normalizeStatus(raw?.status) });
+  } catch (err) {
+    res.status(500).json({ error: "Zerops status fetch failed", detail: err.message });
+  }
+});
+
 router.get("/:replay_id", async (req, res) => {
   const { replay_id } = req.params;
   const replay = await replays.getReplay(replay_id);
