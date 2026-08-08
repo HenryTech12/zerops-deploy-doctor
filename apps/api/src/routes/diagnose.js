@@ -6,7 +6,7 @@ const { runDiagnosis } = require("../lib/diagnosisPipeline");
 const router = express.Router();
 
 router.post("/", async (req, res) => {
-  const { yaml, log, text, repo_url, use_connected_repo, replay_id } = req.body || {};
+  const { yaml, log, text, repo_url, use_connected_repo, file_paths, replay_id } = req.body || {};
 
   if (!yaml && !log && !text && !use_connected_repo) {
     return res.status(400).json({ error: "Provide at least one of yaml, log, or text." });
@@ -19,6 +19,7 @@ router.post("/", async (req, res) => {
       text,
       repoUrl: repo_url,
       useConnectedRepo: Boolean(use_connected_repo),
+      filePaths: Array.isArray(file_paths) ? file_paths : undefined,
       existingReplayId: replay_id,
     });
     res.json(result);

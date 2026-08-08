@@ -53,7 +53,16 @@ function fallbackDiagnosis(pattern, hint, reason) {
  * "fail" timeline event, and returns the diagnosis JSON + replay/attempt ids.
  * Used for both explicit user submissions and F8's automatic trigger.
  */
-async function runDiagnosis({ yaml, log, text, repoUrl, useConnectedRepo, existingReplayId, titleHint }) {
+async function runDiagnosis({
+  yaml,
+  log,
+  text,
+  repoUrl,
+  useConnectedRepo,
+  filePaths,
+  existingReplayId,
+  titleHint,
+}) {
   let routerResult = null;
   if (text && llm.isConfigured()) {
     try {
@@ -71,11 +80,13 @@ async function runDiagnosis({ yaml, log, text, repoUrl, useConnectedRepo, existi
       throw new Error("No repo connected — connect one in the dashboard first.");
     }
     try {
-      sourceFiles = await github.fetchRelevantSourcesForRepo(
-        connection.owner,
-        connection.repo,
-        connection.branch
-      );
+      // An explicit file selection (from the "Analyze codebase" picker)
+      // overrides the entrypoint-name heuristic — the user knows exactly
+      // which files they want reviewed.
+      sourceFiles =
+        filePaths && filePaths.length
+          ? await github.fetchSourcesForFiles(connection.owner, connection.repo, connection.branch, filePaths)
+          : await github.fetchRelevantSourcesForRepo(connection.owner, connection.repo, connection.branch);
     } catch (err) {
       sourceFiles = `(could not fetch source: ${err.message})`;
     }

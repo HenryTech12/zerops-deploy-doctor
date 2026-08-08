@@ -6,9 +6,14 @@ import {
   getGithubConnection,
   listGithubRepoBranches,
   listGithubRepoFiles,
+  listGithubRepoSourceFiles,
   listGithubRepos,
   saveGithubConnection,
 } from "../lib/api";
+
+const MAX_ANALYZE_FILES = 8;
+const LIKELY_ENTRYPOINT_RE =
+  /^(src\/)?(index|server|app|main|db)\.(js|jsx|ts|tsx|mjs|cjs|py|go|rb|java)$/i;
 
 function GithubMark({ className }) {
   return (
@@ -46,6 +51,14 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
+
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
+  const [sourceFiles, setSourceFiles] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [sourceQuery, setSourceQuery] = useState("");
+  const [sourcePage, setSourcePage] = useState(0);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState(null);
 
   useEffect(() => {
     getGithubAppInfo().then(setAppInfo).catch(() => setAppInfo(null));
@@ -125,6 +138,43 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
     }
   }
 
+  function openAnalyze() {
+    if (!connection) return;
+    setAnalyzeOpen(true);
+    setSourceQuery("");
+    setSourcePage(0);
+    setSelectedFiles([]);
+    setSourceError(null);
+    setSourceLoading(true);
+    listGithubRepoSourceFiles(connection.owner, connection.repo, connection.branch)
+      .then((r) => setSourceFiles(r.files))
+      .catch((err) => {
+        setSourceError(err.message);
+        setSourceFiles(null);
+      })
+      .finally(() => setSourceLoading(false));
+  }
+
+  function toggleFile(path) {
+    setSelectedFiles((prev) =>
+      prev.includes(path)
+        ? prev.filter((p) => p !== path)
+        : prev.length < MAX_ANALYZE_FILES
+        ? [...prev, path]
+        : prev
+    );
+  }
+
+  function selectLikelyEntrypoints() {
+    if (!sourceFiles) return;
+    setSelectedFiles(sourceFiles.filter((f) => LIKELY_ENTRYPOINT_RE.test(f)).slice(0, MAX_ANALYZE_FILES));
+  }
+
+  function submitAnalyze(filePaths) {
+    setAnalyzeOpen(false);
+    onAnalyze?.(filePaths);
+  }
+
   const PAGE_SIZE = 7;
 
   // repos already arrives newest-created-first from the API — filtering
@@ -145,6 +195,24 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
 
   const noInstallation = Boolean(error && error.toLowerCase().includes("no installations"));
 
+  const filteredSourceFiles = useMemo(() => {
+    if (!sourceFiles) return null;
+    const q = sourceQuery.trim().toLowerCase();
+    if (!q) return sourceFiles;
+    return sourceFiles.filter((f) => f.toLowerCase().includes(q));
+  }, [sourceFiles, sourceQuery]);
+
+  useEffect(() => {
+    setSourcePage(0);
+  }, [sourceQuery, sourceFiles]);
+
+  const sourcePageCount = filteredSourceFiles
+    ? Math.max(1, Math.ceil(filteredSourceFiles.length / PAGE_SIZE))
+    : 1;
+  const pagedSourceFiles = filteredSourceFiles
+    ? filteredSourceFiles.slice(sourcePage * PAGE_SIZE, sourcePage * PAGE_SIZE + PAGE_SIZE)
+    : null;
+
   return (
     <>
       <div className="rounded-lg border border-white/10 bg-panel p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -164,10 +232,10 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
             <div className="flex items-center gap-2 shrink-0">
               {onAnalyze && (
                 <button
-                  onClick={onAnalyze}
+                  onClick={openAnalyze}
                   disabled={analyzing}
                   className="flex items-center gap-1.5 rounded-md bg-teal/10 border border-teal/30 text-teal px-3 py-1.5 text-xs font-medium hover:bg-teal/20 transition disabled:opacity-50"
-                  title="Diagnose without pasting anything — scan the connected repo directly"
+                  title="Pick files to scan, or auto-detect — no pasted error required"
                 >
                   <ScanMark className="h-3.5 w-3.5" />
                   {analyzing ? "Analyzing…" : "Analyze codebase"}
@@ -431,6 +499,142 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
                 {error && <p className="text-xs text-coral">{error}</p>}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {analyzeOpen && connection && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setAnalyzeOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg border border-white/10 bg-panel shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <div>
+                <h3 className="font-display text-sm text-text-primary">Analyze codebase</h3>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {connection.owner}/{connection.repo} @ {connection.branch}
+                </p>
+              </div>
+              <button
+                onClick={() => setAnalyzeOpen(false)}
+                className="text-text-muted hover:text-text-primary text-sm"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-text-muted">
+                Pick up to {MAX_ANALYZE_FILES} files to scan — no pasted error needed, the LLM will
+                look for the most likely bug or misconfiguration across what you select.
+              </p>
+
+              <div className="flex items-center gap-2">
+                <input
+                  value={sourceQuery}
+                  onChange={(e) => setSourceQuery(e.target.value)}
+                  placeholder="Search files…"
+                  className="flex-1 rounded-md border border-white/10 bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted"
+                />
+                <button
+                  onClick={selectLikelyEntrypoints}
+                  disabled={!sourceFiles}
+                  className="shrink-0 rounded-md border border-white/10 px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:border-white/20 transition disabled:opacity-50"
+                >
+                  Auto-select
+                </button>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto rounded-md border border-white/10 divide-y divide-white/10">
+                {sourceLoading && (
+                  <p className="p-4 text-xs text-text-muted text-center">Loading files…</p>
+                )}
+
+                {!sourceLoading && sourceError && (
+                  <p className="p-4 text-xs text-coral text-center">{sourceError}</p>
+                )}
+
+                {!sourceLoading && filteredSourceFiles && filteredSourceFiles.length === 0 && (
+                  <p className="p-4 text-xs text-amber text-center">No source files match.</p>
+                )}
+
+                {!sourceLoading &&
+                  pagedSourceFiles &&
+                  pagedSourceFiles.map((f) => {
+                    const checked = selectedFiles.includes(f);
+                    const disabled = !checked && selectedFiles.length >= MAX_ANALYZE_FILES;
+                    return (
+                      <label
+                        key={f}
+                        className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-white/5 transition ${
+                          disabled ? "opacity-40 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => toggleFile(f)}
+                          className="accent-teal shrink-0"
+                        />
+                        <span className="text-sm text-text-primary font-mono text-xs truncate">{f}</span>
+                      </label>
+                    );
+                  })}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-text-muted">
+                  {selectedFiles.length}/{MAX_ANALYZE_FILES} selected
+                </span>
+
+                {filteredSourceFiles && filteredSourceFiles.length > PAGE_SIZE && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSourcePage((p) => Math.max(0, p - 1))}
+                      disabled={sourcePage === 0}
+                      className="rounded border border-white/10 px-2 py-1 text-xs text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:hover:text-text-secondary transition"
+                      aria-label="Previous page"
+                    >
+                      ←
+                    </button>
+                    <span className="text-xs text-text-muted">
+                      Page {sourcePage + 1} of {sourcePageCount}
+                    </span>
+                    <button
+                      onClick={() => setSourcePage((p) => Math.min(sourcePageCount - 1, p + 1))}
+                      disabled={sourcePage >= sourcePageCount - 1}
+                      className="rounded border border-white/10 px-2 py-1 text-xs text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:hover:text-text-secondary transition"
+                      aria-label="Next page"
+                    >
+                      →
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={() => submitAnalyze(undefined)}
+                  className="rounded-md border border-white/10 px-3 py-2 text-xs text-text-secondary hover:text-text-primary transition"
+                  title="Let DeployDoctor guess likely entrypoint files instead of picking your own"
+                >
+                  Auto-detect for me
+                </button>
+                <button
+                  onClick={() => submitAnalyze(selectedFiles)}
+                  disabled={selectedFiles.length === 0}
+                  className="flex-1 rounded-md bg-teal text-bg font-medium py-2 text-sm hover:bg-teal/90 transition disabled:opacity-50"
+                >
+                  Analyze {selectedFiles.length > 0 ? `${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""}` : "selected files"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

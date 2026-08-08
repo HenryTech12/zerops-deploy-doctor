@@ -114,7 +114,7 @@ pattern.
 
 | Method | Route | Purpose |
 |---|---|---|
-| POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, use_connected_repo?, replay_id?}` → rules engine + LLM → diagnosis JSON |
+| POST | `/api/diagnose` | `{yaml?, log?, text?, repo_url?, use_connected_repo?, file_paths?, replay_id?}` → rules engine + LLM → diagnosis JSON |
 | POST | `/api/apply-fix` | `{replay_id, fixed_yaml}` → commit the fix to the patient repo, Zerops redeploys on push (config errors only) |
 | GET | `/api/status/:replay_id` | poll deploy status; appends timeline events on state change |
 | GET | `/api/replay/:id` | public, read-only replay data — no auth |
@@ -124,6 +124,7 @@ pattern.
 | GET | `/api/github/repos` | repos the App's installation currently has access to |
 | GET | `/api/github/repos/:owner/:repo/files` | yaml/yml files in that repo, for the file picker |
 | GET | `/api/github/repos/:owner/:repo/branches` | branches in that repo, for the branch picker |
+| GET | `/api/github/repos/:owner/:repo/source-files` | source-code files in that repo, for the "Analyze codebase" file picker |
 | GET | `/api/github/connection` | the currently connected owner/repo/branch/file |
 | POST | `/api/github/connection` | `{owner, repo, branch?, yaml_path?}` → save the active connection |
 | GET | `/api/github/connection/content` | current content of the connected file — prefills the diagnose form |
@@ -204,9 +205,12 @@ roadmap for multi-user).
 
 Once a repo is connected, the dashboard's diagnose form auto-loads its real
 `zerops.yaml` (no copy-paste needed — just paste the error log), and an
-**Analyze codebase** button on the connection card runs F7 straight against
-the connected repo's source with no pasted error required at all — useful
-for the "something's wrong but I don't have a log yet" case.
+**Analyze codebase** button on the connection card opens a file picker (up
+to 8 files, searchable, with an "Auto-select" that guesses likely
+entrypoints) and runs F7 straight against whichever files you choose — no
+pasted error required at all, useful for the "something's wrong but I don't
+have a log yet" case. "Auto-detect for me" skips picking entirely and falls
+back to the same entrypoint-name heuristic F7 always used.
 
 ## The patient app
 

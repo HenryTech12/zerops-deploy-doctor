@@ -17,10 +17,10 @@ async function request(path, options) {
   return body;
 }
 
-export function diagnose({ yaml, log, text, repo_url, use_connected_repo, replay_id }) {
+export function diagnose({ yaml, log, text, repo_url, use_connected_repo, file_paths, replay_id }) {
   return request("/api/diagnose", {
     method: "POST",
-    body: JSON.stringify({ yaml, log, text, repo_url, use_connected_repo, replay_id }),
+    body: JSON.stringify({ yaml, log, text, repo_url, use_connected_repo, file_paths, replay_id }),
   });
 }
 
@@ -69,6 +69,10 @@ export function getGithubConnectionContent() {
 
 export function listGithubRepoBranches(owner, repo) {
   return request(`/api/github/repos/${owner}/${repo}/branches`);
+}
+
+export function listGithubRepoSourceFiles(owner, repo, branch) {
+  return request(`/api/github/repos/${owner}/${repo}/source-files?branch=${encodeURIComponent(branch)}`);
 }
 
 export function saveGithubConnection({ owner, repo, branch, yaml_path }) {

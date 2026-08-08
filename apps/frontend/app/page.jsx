@@ -153,7 +153,7 @@ export default function Dashboard() {
 
       <ConnectRepo
         onConnected={refreshConnectedYaml}
-        onAnalyze={() => runDiagnosis({ use_connected_repo: true })}
+        onAnalyze={(filePaths) => runDiagnosis({ use_connected_repo: true, file_paths: filePaths })}
         analyzing={loading}
       />
 

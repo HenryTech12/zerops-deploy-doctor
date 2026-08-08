@@ -54,6 +54,18 @@ router.get("/repos/:owner/:repo/files", async (req, res) => {
   }
 });
 
+router.get("/repos/:owner/:repo/source-files", async (req, res) => {
+  if (!requireConfigured(res)) return;
+  const { owner, repo } = req.params;
+  const branch = req.query.branch || "main";
+  try {
+    const files = await github.listInstallationSourceFiles(owner, repo, branch);
+    res.json({ files });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to list repo source files", detail: err.message });
+  }
+});
+
 router.get("/repos/:owner/:repo/branches", async (req, res) => {
   if (!requireConfigured(res)) return;
   const { owner, repo } = req.params;

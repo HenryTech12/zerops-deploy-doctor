@@ -79,6 +79,48 @@ async function listInstallationYamlFiles(owner, repo, branch) {
     .map((n) => n.path);
 }
 
+// Excludes noise directories/lockfiles that would otherwise dominate a
+// source-file picker without ever being what someone wants to analyze.
+const SOURCE_EXT_RE = /\.(js|jsx|ts|tsx|mjs|cjs|py|go|rb|java|php|c|cpp|cs|rs|sh|yaml|yml|json)$/i;
+const EXCLUDED_DIR_RE = /(^|\/)(node_modules|\.git|dist|build|\.next|vendor|coverage)\//i;
+const EXCLUDED_FILE_RE = /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/i;
+
+/** Source-code files in an installation-accessible repo, for the "Analyze
+ * codebase" file picker — lets the user choose exactly which files feed
+ * the LLM instead of relying only on the entrypoint-name heuristic. */
+async function listInstallationSourceFiles(owner, repo, branch) {
+  const headers = await ghWriteHeaders();
+  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, {
+    headers,
+  });
+  if (!res.ok) throw new Error(`GitHub tree fetch failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return (data.tree || [])
+    .filter(
+      (n) =>
+        n.type === "blob" &&
+        SOURCE_EXT_RE.test(n.path) &&
+        !EXCLUDED_DIR_RE.test(n.path) &&
+        !EXCLUDED_FILE_RE.test(n.path)
+    )
+    .map((n) => n.path);
+}
+
+/** Fetches exactly the given files' content — used when the user picks
+ * specific files to analyze instead of the automatic candidate shortlist. */
+async function fetchSourcesForFiles(owner, repo, branch, filePaths) {
+  const files = await Promise.all(
+    filePaths.map(async (p) => ({
+      path: p,
+      content: await getFileContent(owner, repo, p, branch).catch(() => null),
+    }))
+  );
+  return files
+    .filter((f) => f.content)
+    .map((f) => `--- ${f.path} ---\n${f.content}`)
+    .join("\n\n");
+}
+
 /** Branches in an installation-accessible repo, for the "Connect repo"
  * branch picker — same installation-token access as the file picker. */
 async function listInstallationBranches(owner, repo) {
@@ -200,8 +242,10 @@ module.exports = {
   parseRepoUrl,
   fetchRelevantSources,
   fetchRelevantSourcesForRepo,
+  fetchSourcesForFiles,
   commitFile,
   listInstallationYamlFiles,
+  listInstallationSourceFiles,
   listInstallationBranches,
   getFileContent,
   getAppInfo: () => githubApp.getAppInfo(),
