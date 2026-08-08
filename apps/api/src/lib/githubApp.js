@@ -12,11 +12,34 @@ function base64url(input) {
   return Buffer.from(input).toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
-// GitHub private keys are PEM (multi-line). A single-line env var field
-// can't hold real newlines, so this accepts either the raw PEM or a
-// version with literal "\n" escape sequences in place of real newlines.
+// GitHub private keys are PEM (multi-line). Env var UIs mangle that in a
+// few different ways depending on how the value was pasted — this repairs
+// each one rather than assuming a single format:
+//   - wrapping quotes some UIs add literally around a pasted value
+//   - real newlines converted to literal "\n" escape sequences
+//   - CRLF line endings
+//   - newlines dropped entirely, collapsing the whole PEM onto one line
+//     (seen live: this is what produced Node's undecodable-key error)
 function normalizePrivateKey(key) {
-  return key.includes("\\n") ? key.replace(/\\n/g, "\n") : key;
+  let k = key.trim();
+
+  if ((k.startsWith('"') && k.endsWith('"')) || (k.startsWith("'") && k.endsWith("'"))) {
+    k = k.slice(1, -1).trim();
+  }
+  if (k.includes("\\n")) k = k.replace(/\\n/g, "\n");
+  k = k.replace(/\r\n/g, "\n").trim();
+
+  if (!k.includes("\n")) {
+    const m = k.match(/-----BEGIN ([A-Z ]+)-----(.*)-----END \1-----/);
+    if (m) {
+      const label = m[1];
+      const body = m[2].replace(/\s+/g, "");
+      const wrapped = body.match(/.{1,64}/g).join("\n");
+      k = `-----BEGIN ${label}-----\n${wrapped}\n-----END ${label}-----\n`;
+    }
+  }
+
+  return k;
 }
 
 function signAppJWT() {
