@@ -2,18 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  activateGithubSession,
+  createGithubSession,
+  deleteGithubSession,
   getGithubAppInfo,
-  getGithubConnection,
   listGithubRepoBranches,
   listGithubRepoFiles,
   listGithubRepoSourceFiles,
   listGithubRepos,
-  saveGithubConnection,
+  listGithubSessions,
+  renameGithubSession,
 } from "../lib/api";
-
-const MAX_ANALYZE_FILES = 8;
-const LIKELY_ENTRYPOINT_RE =
-  /^(src\/)?(index|server|app|main|db)\.(js|jsx|ts|tsx|mjs|cjs|py|go|rb|java)$/i;
 
 function GithubMark({ className }) {
   return (
@@ -32,25 +31,59 @@ function ScanMark({ className }) {
   );
 }
 
+function PencilMark({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function TrashMark({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    </svg>
+  );
+}
+
+const MAX_ANALYZE_FILES = 8;
+const LIKELY_ENTRYPOINT_RE =
+  /^(src\/)?(index|server|app|main|db)\.(js|jsx|ts|tsx|mjs|cjs|py|go|rb|java)$/i;
+const PAGE_SIZE = 7;
+
 // F2's real "connect a repo" flow, modeled on Vercel/Render's Git import
-// UI: connect the GitHub App, browse an actual repo list in a modal,
-// pick one, configure branch + config file, done.
-export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
+// UI, but named: users work across more than one repo, so this is a real
+// list of saved, switchable sessions rather than one slot that gets
+// silently overwritten every time.
+export default function RepoSessions({ username, onConnected, onAnalyze, analyzing }) {
   const [appInfo, setAppInfo] = useState(null);
-  const [connection, setConnection] = useState(null);
+  const [sessions, setSessions] = useState(null);
+  const [sessionsError, setSessionsError] = useState(null);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [step, setStep] = useState("list"); // "list" | "configure"
   const [repos, setRepos] = useState(null);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(null);
   const [files, setFiles] = useState([]);
   const [branches, setBranches] = useState([]);
   const [branch, setBranch] = useState("main");
   const [yamlPath, setYamlPath] = useState("zerops.yaml");
+  const [sessionName, setSessionName] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [page, setPage] = useState(0);
+
+  const [activatingId, setActivatingId] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [rowError, setRowError] = useState(null);
 
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
   const [sourceFiles, setSourceFiles] = useState(null);
@@ -60,11 +93,20 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState(null);
 
+  const activeSession = sessions?.find((s) => s.is_active) || null;
+
+  function refreshSessions() {
+    return listGithubSessions()
+      .then((r) => {
+        setSessions(r.sessions);
+        setSessionsError(null);
+      })
+      .catch((err) => setSessionsError(err.message));
+  }
+
   useEffect(() => {
     getGithubAppInfo().then(setAppInfo).catch(() => setAppInfo(null));
-    getGithubConnection()
-      .then((r) => setConnection(r.connection))
-      .catch(() => setConnection(null));
+    refreshSessions();
   }, []);
 
   function openModal() {
@@ -90,9 +132,7 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
 
   // Installing the App happens on GitHub's own tab — auto-retry the repo
   // list when the user comes back to this tab instead of making them find
-  // and click "Refresh list" themselves (same effect Vercel/Render's import
-  // flow gets from a popup + postMessage; a focus listener is simpler and
-  // works just as well since the install page opens in a normal new tab).
+  // and click "Refresh list" themselves.
   useEffect(() => {
     if (!modalOpen || step !== "list") return;
     function onFocus() {
@@ -106,6 +146,7 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
     setSelected(repo);
     setBranch(repo.default_branch || "main");
     setYamlPath("zerops.yaml");
+    setSessionName(repo.repo);
     setFiles([]);
     setBranches([]);
     setStep("configure");
@@ -117,18 +158,20 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
       .catch(() => setBranches([]));
   }
 
-  async function onConnect() {
+  async function onCreateSession() {
     if (!selected) return;
     setSaving(true);
     setError(null);
     try {
-      const r = await saveGithubConnection({
+      await createGithubSession({
+        name: sessionName,
         owner: selected.owner,
         repo: selected.repo,
         branch,
         yaml_path: yamlPath,
+        username: username || undefined,
       });
-      setConnection(r.connection);
+      await refreshSessions();
       setModalOpen(false);
       onConnected?.();
     } catch (err) {
@@ -138,15 +181,58 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
     }
   }
 
+  async function onSetActive(id) {
+    setActivatingId(id);
+    setRowError(null);
+    try {
+      await activateGithubSession(id);
+      await refreshSessions();
+      onConnected?.();
+    } catch (err) {
+      setRowError(err.message);
+    } finally {
+      setActivatingId(null);
+    }
+  }
+
+  function startRename(session) {
+    setRenamingId(session.id);
+    setRenameValue(session.name);
+    setRowError(null);
+  }
+
+  async function saveRename(id) {
+    setRowError(null);
+    try {
+      await renameGithubSession(id, renameValue);
+      setRenamingId(null);
+      await refreshSessions();
+    } catch (err) {
+      setRowError(err.message);
+    }
+  }
+
+  async function onDelete(id) {
+    setRowError(null);
+    try {
+      await deleteGithubSession(id);
+      setConfirmDeleteId(null);
+      await refreshSessions();
+      onConnected?.();
+    } catch (err) {
+      setRowError(err.message);
+    }
+  }
+
   function openAnalyze() {
-    if (!connection) return;
+    if (!activeSession) return;
     setAnalyzeOpen(true);
     setSourceQuery("");
     setSourcePage(0);
     setSelectedFiles([]);
     setSourceError(null);
     setSourceLoading(true);
-    listGithubRepoSourceFiles(connection.owner, connection.repo, connection.branch)
+    listGithubRepoSourceFiles(activeSession.owner, activeSession.repo, activeSession.branch)
       .then((r) => setSourceFiles(r.files))
       .catch((err) => {
         setSourceError(err.message);
@@ -175,10 +261,6 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
     onAnalyze?.(filePaths);
   }
 
-  const PAGE_SIZE = 7;
-
-  // repos already arrives newest-created-first from the API — filtering
-  // resets to page 0 so a search doesn't strand the user on an empty page.
   const filteredRepos = useMemo(() => {
     if (!repos) return null;
     const q = query.trim().toLowerCase();
@@ -192,8 +274,6 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
 
   const pageCount = filteredRepos ? Math.max(1, Math.ceil(filteredRepos.length / PAGE_SIZE)) : 1;
   const pagedRepos = filteredRepos ? filteredRepos.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE) : null;
-
-  const noInstallation = Boolean(error && error.toLowerCase().includes("no installations"));
 
   const filteredSourceFiles = useMemo(() => {
     if (!sourceFiles) return null;
@@ -213,58 +293,141 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
     ? filteredSourceFiles.slice(sourcePage * PAGE_SIZE, sourcePage * PAGE_SIZE + PAGE_SIZE)
     : null;
 
+  const noInstallation = Boolean(error && error.toLowerCase().includes("no installations"));
+
   return (
     <>
-      <div className="rounded-lg border border-white/10 bg-panel p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {connection ? (
-          <>
-            <div className="flex items-center gap-3 min-w-0">
-              <GithubMark className="h-5 w-5 text-text-secondary shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm text-text-primary truncate">
-                  {connection.owner}/{connection.repo}
-                </p>
-                <p className="text-xs text-text-muted truncate">
-                  {connection.branch} — {connection.yaml_path}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {onAnalyze && (
-                <button
-                  onClick={openAnalyze}
-                  disabled={analyzing}
-                  className="flex items-center gap-1.5 rounded-md bg-teal/10 border border-teal/30 text-teal px-3 py-1.5 text-xs font-medium hover:bg-teal/20 transition disabled:opacity-50"
-                  title="Pick files to scan, or auto-detect — no pasted error required"
-                >
-                  <ScanMark className="h-3.5 w-3.5" />
-                  {analyzing ? "Analyzing…" : "Analyze codebase"}
-                </button>
-              )}
-              <button
-                onClick={openModal}
-                className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:border-white/20 transition"
-              >
-                Change
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-3">
-              <GithubMark className="h-5 w-5 text-text-secondary" />
-              <div>
-                <p className="text-sm text-text-primary">No repository connected</p>
-                <p className="text-xs text-text-muted">Apply-fix needs a repo to commit fixes to</p>
-              </div>
-            </div>
-            <button
-              onClick={openModal}
-              className="shrink-0 rounded-md bg-teal text-bg text-xs font-medium px-3 py-2 hover:bg-teal/90 transition"
-            >
-              Import Git Repository
-            </button>
-          </>
+      <div className="rounded-lg border border-white/10 bg-panel p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm text-text-primary font-medium">
+            Repo sessions
+            {sessions && sessions.length > 0 && (
+              <span className="text-text-muted font-normal"> ({sessions.length})</span>
+            )}
+          </h2>
+          <button
+            onClick={openModal}
+            className="shrink-0 flex items-center gap-1.5 rounded-md bg-teal text-bg text-xs font-medium px-3 py-1.5 hover:bg-teal/90 transition"
+          >
+            + New session
+          </button>
+        </div>
+
+        {sessionsError && <p className="text-xs text-coral">{sessionsError}</p>}
+        {rowError && <p className="text-xs text-coral">{rowError}</p>}
+
+        {sessions && sessions.length === 0 && (
+          <div className="text-center py-6 space-y-2">
+            <GithubMark className="h-7 w-7 mx-auto text-text-muted" />
+            <p className="text-sm text-text-secondary">No repo sessions yet</p>
+            <p className="text-xs text-text-muted">
+              Apply-fix and Analyze codebase need a session to work against.
+            </p>
+          </div>
+        )}
+
+        {sessions && sessions.length > 0 && (
+          <ul className="divide-y divide-white/10 -mx-4 px-4">
+            {sessions.map((s) => (
+              <li key={s.id} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start gap-3">
+                  <GithubMark className="h-4 w-4 text-text-secondary shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    {renamingId === s.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveRename(s.id);
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                          className="flex-1 rounded-md border border-teal/40 bg-bg px-2 py-1 text-sm text-text-primary"
+                        />
+                        <button
+                          onClick={() => saveRename(s.id)}
+                          className="text-xs text-teal font-medium shrink-0"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setRenamingId(null)}
+                          className="text-xs text-text-muted shrink-0"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-text-primary font-medium truncate">{s.name}</span>
+                        {s.is_active && (
+                          <span className="shrink-0 rounded-full bg-teal/10 text-teal text-[10px] font-medium px-2 py-0.5">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-xs text-text-muted truncate mt-0.5">
+                      {s.owner}/{s.repo} — {s.branch} — {s.yaml_path}
+                    </p>
+
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                      {s.is_active ? (
+                        <button
+                          onClick={openAnalyze}
+                          disabled={analyzing}
+                          className="flex items-center gap-1.5 rounded-md bg-teal/10 border border-teal/30 text-teal px-2.5 py-1 text-xs font-medium hover:bg-teal/20 transition disabled:opacity-50"
+                        >
+                          <ScanMark className="h-3.5 w-3.5" />
+                          {analyzing ? "Analyzing…" : "Analyze codebase"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onSetActive(s.id)}
+                          disabled={activatingId === s.id}
+                          className="rounded-md border border-white/10 px-2.5 py-1 text-xs text-text-secondary hover:text-text-primary hover:border-white/20 transition disabled:opacity-50"
+                        >
+                          {activatingId === s.id ? "Switching…" : "Set active"}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => startRename(s)}
+                        className="text-text-muted hover:text-text-primary transition"
+                        aria-label="Rename session"
+                        title="Rename"
+                      >
+                        <PencilMark className="h-3.5 w-3.5" />
+                      </button>
+                      {confirmDeleteId === s.id ? (
+                        <span className="flex items-center gap-2 text-xs">
+                          <span className="text-text-muted">Delete?</span>
+                          <button onClick={() => onDelete(s.id)} className="text-coral font-medium">
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="text-text-muted"
+                          >
+                            No
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteId(s.id)}
+                          className="text-text-muted hover:text-coral transition"
+                          aria-label="Delete session"
+                          title="Delete"
+                        >
+                          <TrashMark className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
@@ -279,7 +442,7 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
           >
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
               <h3 className="font-display text-sm text-text-primary">
-                {step === "list" ? "Import Git Repository" : "Configure connection"}
+                {step === "list" ? "Import Git Repository" : "New session"}
               </h3>
               <button
                 onClick={() => setModalOpen(false)}
@@ -374,7 +537,7 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
                           )}
                         </div>
                         <span className="shrink-0 rounded-md bg-teal/10 text-teal text-xs px-2 py-1">
-                          Import
+                          Select
                         </span>
                       </button>
                     ))}
@@ -424,6 +587,17 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
                   <GithubMark className="h-4 w-4 text-text-secondary" />
                   <span className="text-sm text-text-primary">{selected.full_name}</span>
                 </div>
+
+                <label className="block text-xs text-text-muted">
+                  Session name
+                  <input
+                    value={sessionName}
+                    onChange={(e) => setSessionName(e.target.value)}
+                    placeholder="e.g. Patient app"
+                    maxLength={60}
+                    className="mt-1 w-full rounded-md border border-white/10 bg-bg px-2 py-1.5 text-sm text-text-primary"
+                  />
+                </label>
 
                 <label className="block text-xs text-text-muted">
                   Branch
@@ -488,11 +662,11 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
                     Back
                   </button>
                   <button
-                    onClick={onConnect}
-                    disabled={saving}
+                    onClick={onCreateSession}
+                    disabled={saving || !sessionName.trim()}
                     className="flex-1 rounded-md bg-teal text-bg font-medium py-2 text-sm hover:bg-teal/90 transition disabled:opacity-50"
                   >
-                    {saving ? "Connecting…" : "Connect"}
+                    {saving ? "Creating…" : "Create session"}
                   </button>
                 </div>
 
@@ -503,7 +677,7 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
         </div>
       )}
 
-      {analyzeOpen && connection && (
+      {analyzeOpen && activeSession && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => setAnalyzeOpen(false)}
@@ -516,7 +690,7 @@ export default function ConnectRepo({ onConnected, onAnalyze, analyzing }) {
               <div>
                 <h3 className="font-display text-sm text-text-primary">Analyze codebase</h3>
                 <p className="text-xs text-text-muted mt-0.5">
-                  {connection.owner}/{connection.repo} @ {connection.branch}
+                  {activeSession.owner}/{activeSession.repo} @ {activeSession.branch}
                 </p>
               </div>
               <button

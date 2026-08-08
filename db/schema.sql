@@ -48,10 +48,9 @@ CREATE TABLE IF NOT EXISTS replay_events (
 CREATE INDEX IF NOT EXISTS idx_replay_events_replay_id ON replay_events(replay_id);
 CREATE INDEX IF NOT EXISTS idx_failed_fixes_pattern_id ON failed_fixes(pattern_id);
 
--- Singleton row (id always 1) — which repo/branch/file F2 apply-fix commits
--- to, set via the "Connect repo" UI instead of the old static PATIENT_REPO
--- env var. Single-tenant app (one GitHub App installation), so one active
--- connection is enough — no need for a per-user table.
+-- Legacy singleton row — superseded by repo_sessions below (kept only so
+-- migrate.js can carry an existing connection forward into a named session
+-- the first time this runs against a database that still has one).
 CREATE TABLE IF NOT EXISTS repo_connection (
   id         INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   owner      TEXT NOT NULL,
@@ -60,3 +59,28 @@ CREATE TABLE IF NOT EXISTS repo_connection (
   yaml_path  TEXT NOT NULL DEFAULT 'zerops.yaml',
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Named, saved repo connections — replaces the single hardcoded connection
+-- so users can save more than one repo they work with and switch between
+-- them. Still single-tenant underneath (one GitHub App installation, no
+-- per-user data isolation — see README roadmap): "active" just means
+-- "the one F2 apply-fix / Analyze codebase currently targets," shared by
+-- whoever opens the dashboard, same as the old singleton was.
+CREATE TABLE IF NOT EXISTS repo_sessions (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  owner      TEXT NOT NULL,
+  repo       TEXT NOT NULL,
+  branch     TEXT NOT NULL DEFAULT 'main',
+  yaml_path  TEXT NOT NULL DEFAULT 'zerops.yaml',
+  username   TEXT,                      -- who created it, if signed in (nullable)
+  is_active  BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enforces "at most one active session" at the database level rather than
+-- trusting application code to always clear the old one first.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_sessions_one_active
+  ON repo_sessions ((is_active)) WHERE is_active;
+
+CREATE INDEX IF NOT EXISTS idx_repo_sessions_username ON repo_sessions(username);

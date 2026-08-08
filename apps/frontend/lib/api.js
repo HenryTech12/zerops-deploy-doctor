@@ -97,11 +97,30 @@ export function listGithubRepoSourceFiles(owner, repo, branch) {
   return request(`/api/github/repos/${owner}/${repo}/source-files?branch=${encodeURIComponent(branch)}`);
 }
 
-export function saveGithubConnection({ owner, repo, branch, yaml_path }) {
-  return request("/api/github/connection", {
+export function listGithubSessions() {
+  return request("/api/github/sessions");
+}
+
+export function createGithubSession({ name, owner, repo, branch, yaml_path, username }) {
+  return request("/api/github/sessions", {
     method: "POST",
-    body: JSON.stringify({ owner, repo, branch, yaml_path }),
+    body: JSON.stringify({ name, owner, repo, branch, yaml_path, username }),
   });
+}
+
+export function activateGithubSession(id) {
+  return request(`/api/github/sessions/${id}/activate`, { method: "POST" });
+}
+
+export function renameGithubSession(id, name) {
+  return request(`/api/github/sessions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteGithubSession(id) {
+  return request(`/api/github/sessions/${id}`, { method: "DELETE" });
 }
 
 export { API_URL };

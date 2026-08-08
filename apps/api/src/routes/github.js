@@ -106,16 +106,64 @@ router.get("/connection/content", async (req, res) => {
   }
 });
 
-router.post("/connection", async (req, res) => {
-  const { owner, repo, branch, yaml_path } = req.body || {};
+// Sessions — named, saved repo connections. Replaces the old single
+// PATCH-in-place "connection" with a real list you can create, switch
+// between, rename, and delete, so a user working across multiple repos
+// doesn't lose one connection every time they set up another.
+router.get("/sessions", async (req, res) => {
+  try {
+    const sessions = await repoConnection.listSessions();
+    res.json({ sessions });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to list sessions", detail: err.message });
+  }
+});
+
+router.post("/sessions", async (req, res) => {
+  const { name, owner, repo, branch, yaml_path, username } = req.body || {};
   if (!owner || !repo) {
     return res.status(400).json({ error: "owner and repo are required." });
   }
   try {
-    const connection = await repoConnection.setConnection({ owner, repo, branch, yaml_path });
-    res.json({ connection });
+    const session = await repoConnection.createSession({
+      name,
+      owner,
+      repo,
+      branch,
+      yaml_path,
+      username,
+    });
+    res.json({ session });
   } catch (err) {
-    res.status(500).json({ error: "Failed to save connection", detail: err.message });
+    res.status(400).json({ error: "Failed to create session", detail: err.message });
+  }
+});
+
+router.post("/sessions/:id/activate", async (req, res) => {
+  try {
+    const session = await repoConnection.activateSession(req.params.id);
+    res.json({ session });
+  } catch (err) {
+    res.status(404).json({ error: "Failed to activate session", detail: err.message });
+  }
+});
+
+router.patch("/sessions/:id", async (req, res) => {
+  const { name } = req.body || {};
+  try {
+    const session = await repoConnection.renameSession(req.params.id, name);
+    res.json({ session });
+  } catch (err) {
+    res.status(400).json({ error: "Failed to rename session", detail: err.message });
+  }
+});
+
+router.delete("/sessions/:id", async (req, res) => {
+  try {
+    await repoConnection.deleteSession(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(404).json({ error: "Failed to delete session", detail: err.message });
   }
 });
 

@@ -8,7 +8,7 @@ import CodeFixCard from "../../components/CodeFixCard";
 import Timeline from "../../components/Timeline";
 import StatsTiles from "../../components/StatsTiles";
 import WatchToggle from "../../components/WatchToggle";
-import ConnectRepo from "../../components/ConnectRepo";
+import RepoSessions from "../../components/RepoSessions";
 import RecentDiagnoses from "../../components/RecentDiagnoses";
 import UserBadge from "../../components/UserBadge";
 import {
@@ -81,7 +81,7 @@ export default function Dashboard() {
 
   // Pulls the connected repo's actual zerops.yaml into the Input panel so
   // the user only has to paste the error log, not the config too. Runs on
-  // load and again whenever ConnectRepo saves a new connection; a 404 (no
+  // load and again whenever RepoSessions activates a session; a 404 (no
   // connection yet) is expected and left non-fatal.
   const refreshConnectedYaml = useCallback(async () => {
     setLoadingConnectedYaml(true);
@@ -194,7 +194,8 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <ConnectRepo
+      <RepoSessions
+        username={username}
         onConnected={refreshConnectedYaml}
         onAnalyze={(filePaths) => runDiagnosis({ use_connected_repo: true, file_paths: filePaths })}
         analyzing={loading}

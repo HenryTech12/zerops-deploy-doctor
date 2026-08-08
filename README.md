@@ -104,11 +104,11 @@ zerops.yaml      main project: frontend + api + db
 ## Data model
 
 See [`db/schema.sql`](db/schema.sql): `failure_patterns`, `failed_fixes`,
-`replays`, `replay_events`. Seed data for rules-engine categories 1–3 lives
-in [`db/seed.sql`](db/seed.sql). Category 4 (runtime/code) is LLM-led by
-design — its `failure_patterns` rows are created the first time the API
-diagnoses a new code error, so it participates in F5/F9 like any other
-pattern.
+`replays`, `replay_events`, `repo_sessions`. Seed data for rules-engine
+categories 1–3 lives in [`db/seed.sql`](db/seed.sql). Category 4
+(runtime/code) is LLM-led by design — its `failure_patterns` rows are
+created the first time the API diagnoses a new code error, so it
+participates in F5/F9 like any other pattern.
 
 ## API surface
 
@@ -123,14 +123,18 @@ pattern.
 | GET | `/api/auth/github/callback` | OAuth callback — redirects back to `/dashboard?gh_user=...` |
 | GET | `/api/patterns/:id/stats` | F5 stat-tile data |
 | GET | `/api/watch/status` | F8 — polled every ~30s while Watch Mode is on |
-| GET | `/api/github/app-info` | GitHub App slug + install URL, for the "Connect repo" button |
+| GET | `/api/github/app-info` | GitHub App slug + install URL, for the "New session" button |
 | GET | `/api/github/repos` | repos the App's installation currently has access to |
 | GET | `/api/github/repos/:owner/:repo/files` | yaml/yml files in that repo, for the file picker |
 | GET | `/api/github/repos/:owner/:repo/branches` | branches in that repo, for the branch picker |
 | GET | `/api/github/repos/:owner/:repo/source-files` | source-code files in that repo, for the "Analyze codebase" file picker |
-| GET | `/api/github/connection` | the currently connected owner/repo/branch/file |
-| POST | `/api/github/connection` | `{owner, repo, branch?, yaml_path?}` → save the active connection |
-| GET | `/api/github/connection/content` | current content of the connected file — prefills the diagnose form |
+| GET | `/api/github/connection` | the currently *active* session's owner/repo/branch/file |
+| GET | `/api/github/connection/content` | current content of the active session's file — prefills the diagnose form |
+| GET | `/api/github/sessions` | list all saved repo sessions |
+| POST | `/api/github/sessions` | `{name, owner, repo, branch?, yaml_path?, username?}` → create a session and make it active |
+| POST | `/api/github/sessions/:id/activate` | switch which session is active |
+| PATCH | `/api/github/sessions/:id` | `{name}` → rename a session |
+| DELETE | `/api/github/sessions/:id` | delete a session |
 
 ## Running locally
 
@@ -198,18 +202,25 @@ pattern Vercel/Netlify use), not a static personal access token:
 for a ~1-hour installation access token on demand.
 
 You don't need to manually install the App on a repo — the dashboard's
-**Connect repo** panel links straight to GitHub's own "Install/manage" page
-for the App (same flow Vercel/Netlify use). After installing on one or more
-repos there, back in DeployDoctor: **Refresh repo list** → pick the repo,
-branch, and yaml file → **Save connection**. That connection (stored in the
-`repo_connection` table) is what F2's apply-fix commits to; single-tenant by
-design (one App, one installation, one active connection at a time — see
-roadmap for multi-user).
+**Repo sessions** panel's "+ New session" links straight to GitHub's own
+"Install/manage" page for the App (same flow Vercel/Netlify use). After
+installing on one or more repos there, back in DeployDoctor: pick the
+repo → give the session a name → pick the branch and yaml file → **Create
+session**, which saves it (in the `repo_sessions` table) and makes it
+active.
 
-Once a repo is connected, the dashboard's diagnose form auto-loads its real
+Sessions are a real list, not a single slot: save one per repo you work
+with, switch which one is active without losing the others, rename or
+delete any of them. Whichever session is active is what F2's apply-fix and
+"Analyze codebase" target — still single-tenant underneath (one GitHub App
+installation, no per-user data isolation — see roadmap), so "active" is
+shared by everyone who opens the dashboard, same as the old single
+connection was.
+
+Once a session is active, the dashboard's diagnose form auto-loads its real
 `zerops.yaml` (no copy-paste needed — just paste the error log), and an
-**Analyze codebase** button on the connection card opens a file picker (up
-to 8 files, searchable, with an "Auto-select" that guesses likely
+**Analyze codebase** button on the active session's row opens a file picker
+(up to 8 files, searchable, with an "Auto-select" that guesses likely
 entrypoints) and runs F7 straight against whichever files you choose — no
 pasted error required at all, useful for the "something's wrong but I don't
 have a log yet" case. "Auto-detect for me" skips picking entirely and falls
@@ -287,15 +298,16 @@ display, Inter for body text, JetBrains Mono for yaml/logs/diffs.
   Zerops dashboard.
 - **Level 3 learning:** fine-tuning or a learned fix-ranking model on top of
   the `failed_fixes` table (F9 today is prompt injection only, by design).
-- **Multi-tenant repo connections:** F2's apply-fix already uses a real
-  GitHub App with short-lived installation tokens and a dashboard "Connect
-  repo" UI (pick the repo/branch/file, not hardcoded — see "GitHub App
-  setup"), but it's single-tenant — one App, one installation, one active
-  connection shared by everyone who opens the dashboard. GitHub sign-in
-  (see "GitHub sign-in") gives DeployDoctor a lightweight notion of "who,"
-  but it's tagging, not accounts — no server-side session, no per-user
-  data isolation. A general "connect any repo, per user" version would
-  still need per-user install callbacks and real sessions on top of that.
+- **Multi-tenant repo sessions:** F2's apply-fix already uses a real GitHub
+  App with short-lived installation tokens and a dashboard "Repo sessions"
+  UI (save, name, switch between, rename, delete multiple repo connections
+  — see "GitHub App setup"), but it's still single-tenant underneath — one
+  App, one installation, and "active" is shared by everyone who opens the
+  dashboard, not scoped per user. GitHub sign-in (see "GitHub sign-in")
+  gives DeployDoctor a lightweight notion of "who," but it's tagging, not
+  accounts — no server-side session, no per-user data isolation. A general
+  "each user sees only their own sessions" version would need per-user
+  install callbacks and real sessions on top of that.
 
 ## Known limitations
 
