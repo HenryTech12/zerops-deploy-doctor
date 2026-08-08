@@ -168,30 +168,45 @@ async function getAppInfo() {
   return cachedAppInfo;
 }
 
-/** Every repo this App's single installation currently has access to. */
+/** Every repo this App's single installation currently has access to,
+ * newest-created first. GitHub paginates this endpoint (default 30/page,
+ * oldest-granted first) — a repo installed after the first ~30 wouldn't
+ * show up at all without walking every page. */
 async function listInstallationRepos() {
   // getInstallationToken() calls getInstallationId() internally, which is
   // where the clear "install the App first" error surfaces if there's no
   // installation yet.
   const token = await getInstallationToken();
-  const res = await fetch(`${API_BASE}/installation/repositories`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "DeployDoctor",
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`GitHub installation repos lookup failed: ${res.status} ${await res.text()}`);
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "DeployDoctor",
+  };
+
+  const all = [];
+  for (let page = 1; ; page++) {
+    const res = await fetch(
+      `${API_BASE}/installation/repositories?per_page=100&page=${page}`,
+      { headers }
+    );
+    if (!res.ok) {
+      throw new Error(`GitHub installation repos lookup failed: ${res.status} ${await res.text()}`);
+    }
+    const data = await res.json();
+    all.push(...(data.repositories || []));
+    if (!data.repositories || data.repositories.length < 100 || all.length >= data.total_count) break;
   }
-  const data = await res.json();
-  return (data.repositories || []).map((r) => ({
-    owner: r.owner.login,
-    repo: r.name,
-    full_name: r.full_name,
-    default_branch: r.default_branch,
-    private: r.private,
-  }));
+
+  return all
+    .map((r) => ({
+      owner: r.owner.login,
+      repo: r.name,
+      full_name: r.full_name,
+      default_branch: r.default_branch,
+      private: r.private,
+      created_at: r.created_at,
+    }))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 module.exports = {

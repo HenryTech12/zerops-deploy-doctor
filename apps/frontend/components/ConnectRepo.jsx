@@ -34,6 +34,7 @@ export default function ConnectRepo() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     getGithubAppInfo().then(setAppInfo).catch(() => setAppInfo(null));
@@ -108,12 +109,23 @@ export default function ConnectRepo() {
     }
   }
 
+  const PAGE_SIZE = 7;
+
+  // repos already arrives newest-created-first from the API — filtering
+  // resets to page 0 so a search doesn't strand the user on an empty page.
   const filteredRepos = useMemo(() => {
     if (!repos) return null;
     const q = query.trim().toLowerCase();
     if (!q) return repos;
     return repos.filter((r) => r.full_name.toLowerCase().includes(q));
   }, [repos, query]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [query, repos]);
+
+  const pageCount = filteredRepos ? Math.max(1, Math.ceil(filteredRepos.length / PAGE_SIZE)) : 1;
+  const pagedRepos = filteredRepos ? filteredRepos.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE) : null;
 
   const noInstallation = Boolean(error && error.toLowerCase().includes("no installations"));
 
@@ -248,8 +260,8 @@ export default function ConnectRepo() {
                   )}
 
                   {!loading &&
-                    filteredRepos &&
-                    filteredRepos.map((r) => (
+                    pagedRepos &&
+                    pagedRepos.map((r) => (
                       <button
                         key={r.full_name}
                         onClick={() => pickRepo(r)}
@@ -271,13 +283,39 @@ export default function ConnectRepo() {
                     ))}
                 </div>
 
-                <button
-                  onClick={loadRepos}
-                  disabled={loading}
-                  className="text-xs text-aiblue hover:underline disabled:opacity-50"
-                >
-                  Refresh list
-                </button>
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={loadRepos}
+                    disabled={loading}
+                    className="text-xs text-aiblue hover:underline disabled:opacity-50"
+                  >
+                    Refresh list
+                  </button>
+
+                  {filteredRepos && filteredRepos.length > PAGE_SIZE && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        className="rounded border border-white/10 px-2 py-1 text-xs text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:hover:text-text-secondary transition"
+                        aria-label="Previous page"
+                      >
+                        ←
+                      </button>
+                      <span className="text-xs text-text-muted">
+                        Page {page + 1} of {pageCount}
+                      </span>
+                      <button
+                        onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                        disabled={page >= pageCount - 1}
+                        className="rounded border border-white/10 px-2 py-1 text-xs text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:hover:text-text-secondary transition"
+                        aria-label="Next page"
+                      >
+                        →
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {error && <p className="text-xs text-coral">{error}</p>}
               </div>
